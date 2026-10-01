@@ -1,0 +1,59 @@
+{
+  "$schema": "./schema/fluxrouter.schema.json",
+  "jev": {
+    "baseUrl": "https://api.typesafe.ai/v1/systemone",
+    "model": "jev-1.13.0",
+    "timeoutMs": 700,
+    "minConfidence": 0.5,
+    "trivialNoul": 0.85,
+    "escalateOnlyAboveComplexity": 0.5,
+    "fallbackTier": 1
+  },
+  "upstreams": {
+    "ollama": { "baseUrl": "https://ollama.com/v1", "apiKeyEnv": "OLLAMA_API_KEY" },
+    "openrouter": { "baseUrl": "https://openrouter.ai/api/v1", "apiKeyEnv": "OPENROUTER_API_KEY" }
+  },
+  "tiers": [
+    {
+      "id": 0,
+      "name": "nano",
+      "models": [
+        { "upstream": "ollama", "id": "nemotron-3-nano:30b", "ctx": 1000000, "in": 0.06, "out": 0.24, "failoverId": "nvidia/nemotron-3-nano" }
+      ]
+    },
+    {
+      "id": 1,
+      "name": "flash",
+      "models": [
+        { "upstream": "ollama", "id": "glm-5.3-flash", "ctx": 1000000, "in": 0.15, "out": 0.5, "failoverId": "zhipuai/glm-5.3-flash" }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "mid",
+      "models": [
+        { "upstream": "ollama", "id": "deepseek-v4-pro:0813", "ctx": 1000000, "in": 0.66, "out": 1.98, "reasoningEffort": "high", "failoverId": "deepseek/deepseek-v4-pro" }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "frontier",
+      "models": [
+        { "upstream": "ollama", "id": "kimi-k3", "ctx": 1000000, "in": 3.0, "out": 15.0, "failoverId": "moonshotai/kimi-k3" }
+      ]
+    }
+  ],
+  "policy": {
+    "default": { "complexityToTier": [[0.8, 0], [1.6, 1], [2.0, 2], [999, 3]] },
+    "overrides": [
+      { "category": "math", "minComplexity": 1.2, "tier": 2 },
+      { "category": "greeting_chitchat", "tier": 0 }
+    ]
+  },
+  "sticky": { "enabled": true, "escapeConfidence": 0.6 },
+  "cost": { "perRequestCapUsd": 0.25 },
+  "eval": { "routingCapUsd": 1, "e2eCapUsd": 10, "judgeModel": "jev-1.13.0" },
+  "server": { "port": 8787, "host": "127.0.0.1", "listTierModels": false },
+  "respectIncomingModel": false,
+  "dataDir": ".fluxrouter"
+}

@@ -1,0 +1,176 @@
+{
+  "info": {
+    "name": "FluxRouter",
+    "description": "FluxRouter OpenAI-compatible proxy. Set the `baseUrl` and `token` variables, then run the requests. Watch the X-Flux-Route-* response headers to see which tier/model Jev chose.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://127.0.0.1:8787" },
+    { "key": "token", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": ["{{baseUrl}}"],
+          "path": ["health"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": ["pm.test('healthy', () => pm.response.to.have.jsonBody('ok', true));"]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Models",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/v1/models",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "models"]
+        }
+      }
+    },
+    {
+      "name": "Chat — trivial (hello) → expect tier 0",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": {
+          "raw": "{{baseUrl}}/v1/chat/completions",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "chat", "completions"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"model\": \"flux\",\n  \"messages\": [\n    { \"role\": \"user\", \"content\": \"hello\" }\n  ]\n}",
+          "options": { "raw": { "language": "json" } }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "pm.test('has route tier header', () => pm.response.to.have.header('X-Flux-Route-Tier'));",
+              "pm.test('trivial routes to tier 0', () => pm.expect(pm.response.headers.get('X-Flux-Route-Tier')).to.eql('0'));",
+              "pm.test('reason is trivial_bypass/policy', () => pm.expect(['trivial_bypass','policy']).to.include(pm.response.headers.get('X-Flux-Route-Reason')));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Chat — textbook probability → expect tier 1",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": {
+          "raw": "{{baseUrl}}/v1/chat/completions",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "chat", "completions"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"model\": \"flux\",\n  \"messages\": [\n    { \"role\": \"user\", \"content\": \"What is the probability of getting at least two heads in five fair coin tosses? Show the calculation.\" }\n  ]\n}",
+          "options": { "raw": { "language": "json" } }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "pm.test('routed above nano', () => pm.expect(Number(pm.response.headers.get('X-Flux-Route-Tier'))).to.be.at.least(1));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Chat — competition math → expect tier 2+",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": {
+          "raw": "{{baseUrl}}/v1/chat/completions",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "chat", "completions"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"model\": \"flux\",\n  \"messages\": [\n    { \"role\": \"user\", \"content\": \"Let f(x) = x^3 - 3x + 1. Prove that f has three distinct real roots and find an interval containing each root. Justify every step rigorously.\" }\n  ]\n}",
+          "options": { "raw": { "language": "json" } }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "pm.test('routed to mid or above', () => pm.expect(Number(pm.response.headers.get('X-Flux-Route-Tier'))).to.be.at.least(2));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Chat — stream: true",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": {
+          "raw": "{{baseUrl}}/v1/chat/completions",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "chat", "completions"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"model\": \"flux\",\n  \"stream\": true,\n  \"messages\": [\n    { \"role\": \"user\", \"content\": \"say hi\" }\n  ]\n}",
+          "options": { "raw": { "language": "json" } }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "pm.test('SSE data frames present', () => pm.expect(pm.response.text()).to.include('data:'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Metrics (Prometheus)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/metrics",
+          "host": ["{{baseUrl}}"],
+          "path": ["metrics"]
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,69 @@
+{
+  "name": "fluxrouter",
+  "version": "0.1.0",
+  "description": "Jev-classified, tier-based LLM model router proxy with route cards, cost guard, and cheap evals",
+  "type": "module",
+  "engines": { "node": ">=24" },
+  "license": "MIT",
+  "author": "Abhijeet Singh",
+  "homepage": "https://github.com/abhijeet/fluxrouter#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/abhijeet/fluxrouter.git"
+  },
+  "bugs": {
+    "url": "https://github.com/abhijeet/fluxrouter/issues"
+  },
+  "bin": {
+    "fluxrouter": "src/index.ts",
+    "flux": "cli/flux.ts"
+  },
+  "files": [
+    "src/",
+    "cli/",
+    "!cli/eval/datasets-files/",
+    "schema/",
+    "docs/",
+    "fluxrouter.config.json",
+    ".env.example",
+    "README.md",
+    "TESTING.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "CHANGELOG.md",
+    "ROADMAP.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "start": "node src/index.ts",
+    "test": "node --test --test-reporter=spec \"tests/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit",
+    "eval:routing": "node cli/flux.ts eval routing",
+    "eval:e2e": "node cli/flux.ts eval e2e",
+    "report": "node cli/flux.ts report",
+    "trace": "node cli/flux.ts trace",
+    "prepublishOnly": "npm run typecheck && npm test"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.7",
+    "commander": "^13.1.0",
+    "hono": "^4.6.16",
+    "undici": "^7.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.7.3"
+  },
+  "keywords": [
+    "llm",
+    "router",
+    "proxy",
+    "openai",
+    "jev",
+    "classification",
+    "cost-optimization",
+    "model-routing",
+    "ollama",
+    "openrouter"
+  ]
+}

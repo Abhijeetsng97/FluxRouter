@@ -1,0 +1,128 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "FluxRouter config",
+  "type": "object",
+  "properties": {
+    "$schema": { "type": "string" },
+    "jev": {
+      "type": "object",
+      "properties": {
+        "baseUrl": { "type": "string" },
+        "model": { "type": "string" },
+        "timeoutMs": { "type": "integer", "minimum": 50 },
+        "minConfidence": { "type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 1 },
+        "trivialNoul": { "type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 1 },
+        "escalateOnlyAboveComplexity": { "type": "number", "minimum": 0, "maximum": 2 },
+        "fallbackTier": { "type": "integer", "minimum": 0, "maximum": 3 }
+      },
+      "required": ["baseUrl", "model"]
+    },
+    "upstreams": {
+      "type": "object",
+      "properties": {
+        "ollama": {
+          "type": "object",
+          "properties": { "baseUrl": { "type": "string" }, "apiKeyEnv": { "type": "string" } },
+          "required": ["baseUrl", "apiKeyEnv"]
+        },
+        "openrouter": {
+          "type": "object",
+          "properties": { "baseUrl": { "type": "string" }, "apiKeyEnv": { "type": "string" } },
+          "required": ["baseUrl", "apiKeyEnv"]
+        }
+      }
+    },
+    "tiers": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "minimum": 0, "maximum": 3 },
+          "name": { "type": "string" },
+          "models": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "properties": {
+                "upstream": { "enum": ["ollama", "openrouter"] },
+                "id": { "type": "string" },
+                "ctx": { "type": "integer", "exclusiveMinimum": 0 },
+                "in": { "type": "number", "minimum": 0 },
+                "cachedIn": { "type": "number", "minimum": 0 },
+                "out": { "type": "number", "minimum": 0 },
+                "reasoningEffort": { "type": "string" },
+                "failoverId": { "type": "string" }
+              },
+              "required": ["upstream", "id", "ctx", "in", "out"]
+            }
+          }
+        },
+        "required": ["id", "name", "models"]
+      }
+    },
+    "policy": {
+      "type": "object",
+      "properties": {
+        "default": {
+          "type": "object",
+          "properties": {
+            "complexityToTier": {
+              "type": "array",
+              "items": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2 }
+            }
+          }
+        },
+        "overrides": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "category": {
+                "enum": ["math", "code_debug", "code_implement", "code_explain", "refactor",
+                  "greeting_chitchat", "summarize", "tool_planning", "creative_writing", "other"]
+              },
+              "minComplexity": { "type": "number" },
+              "tier": { "type": "integer", "minimum": 0, "maximum": 3 }
+            },
+            "required": ["category", "tier"]
+          }
+        }
+      }
+    },
+    "sticky": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "escapeConfidence": { "type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 1 }
+      }
+    },
+    "cost": {
+      "type": "object",
+      "properties": {
+        "perRequestCapUsd": { "type": "number", "exclusiveMinimum": 0 },
+        "openrouterMonthlyCapUsd": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "eval": {
+      "type": "object",
+      "properties": {
+        "routingCapUsd": { "type": "number", "exclusiveMinimum": 0 },
+        "e2eCapUsd": { "type": "number", "exclusiveMinimum": 0 },
+        "judgeModel": { "type": "string" }
+      }
+    },
+    "server": {
+      "type": "object",
+      "properties": {
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "host": { "type": "string" },
+        "listTierModels": { "type": "boolean" }
+      }
+    },
+    "respectIncomingModel": { "type": "boolean" },
+    "dataDir": { "type": "string" }
+  },
+  "required": ["jev", "tiers"]
+}
