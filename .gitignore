@@ -10,7 +10,12 @@ dist/
 
 # FluxRouter runtime data (route cards, eval datasets)
 .fluxrouter/
-cli/eval/datasets-files/
+old/cli/eval/datasets-files/
+
+# Go build artifacts
+/fluxrouter
+*.exe
+fixtures/shadow/
 
 # Environment & secrets
 .env
