@@ -1,4 +1,4 @@
-// Package config mirrors old/src/config.ts. TS "types" vanish at runtime —
+// Package config mirrors old/src/config.ts. TS "types" vanish at runtime â€”
 // a FluxConfig there is just a JSON object merged over defaults. So this port
 // validates the merged MAP (identical messages, identical order) and then
 // compiles it into typed structs. Deep-merge semantics: user wins, objects
@@ -13,7 +13,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/abhijeet/fluxrouter/internal/policy"
+	"github.com/abhijeet/fluxrouter/internal/routing"
 	"github.com/abhijeet/fluxrouter/internal/types"
 )
 
@@ -48,7 +48,7 @@ type Config struct {
 	Tiers []types.Tier `json:"tiers"`
 	Policy struct {
 		Default struct {
-			ComplexityToTier []policy.Band `json:"complexityToTier"`
+			ComplexityToTier []routing.Band `json:"complexityToTier"`
 		} `json:"default"`
 		Overrides []ConfigOverride `json:"overrides"`
 	} `json:"policy"`
@@ -75,7 +75,7 @@ type Config struct {
 }
 
 // defaultComplexityToTier mirrors DEFAULT_COMPLEXITY_TO_TIER (strict "<" bands).
-var defaultComplexityToTier = []policy.Band{
+var defaultComplexityToTier = []routing.Band{
 	{Threshold: 0.8, Tier: 0},
 	{Threshold: 1.6, Tier: 1},
 	{Threshold: 2.0, Tier: 2},
@@ -156,7 +156,7 @@ type LoadResult struct {
 }
 
 // LoadConfig mirrors config.ts loadConfig. A read failure returns the DEFAULT
-// config plus the message (base is NOT merged with the user file) — matches TS.
+// config plus the message (base is NOT merged with the user file) â€” matches TS.
 func LoadConfig(path string) LoadResult {
 	base := DefaultConfig()
 	var user any = map[string]any{}
@@ -167,7 +167,7 @@ func LoadConfig(path string) LoadResult {
 		}
 		if err := json.Unmarshal(data, &user); err != nil {
 			// TS JSON.parse throws with a different message but the same
-			// "cannot read config file" shape is NOT used there — TS catches
+			// "cannot read config file" shape is NOT used there â€” TS catches
 			// the parse error inside the same try, so the message differs.
 			// Keep the same wrapper for load failures either way.
 			return LoadResult{Config: base, Errors: []string{fmt.Sprintf("cannot read config file %s: %s", path, err.Error())}}
@@ -208,7 +208,7 @@ func readErrMsg(err error) string {
 func ValidateConfig(c Config) []string { return ValidateMap(toMap(c)) }
 
 // getNum reads a JSON number that may decode as float64 or (after
-// normalizeNumbers) int64 — mirrors JS typeof === "number" for both shapes.
+// normalizeNumbers) int64 â€” mirrors JS typeof === "number" for both shapes.
 func getNum(m map[string]any, key string) (float64, bool) {
 	if m == nil {
 		return 0, false
@@ -224,7 +224,7 @@ func getNum(m map[string]any, key string) (float64, bool) {
 	return 0, false
 }
 
-// ValidateMap mirrors config.ts validateConfig — messages VERBATIM, same order.
+// ValidateMap mirrors config.ts validateConfig â€” messages VERBATIM, same order.
 func ValidateMap(m map[string]any) []string {
 	var errors []string
 	push := func(s string) { errors = append(errors, s) }
@@ -413,7 +413,7 @@ func jsonString(v any) string {
 	return string(b)
 }
 
-// plainID mirrors TS template-literal interpolation of a model id (${m.id}) —
+// plainID mirrors TS template-literal interpolation of a model id (${m.id}) â€”
 // raw string, NO JSON quoting. Used for the `model <id>:` part of messages
 // (validateConfig uses m.id directly, JSON.stringify only on tier ids).
 func plainID(v any) string {
@@ -424,7 +424,7 @@ func plainID(v any) string {
 }
 
 // rawTemplate mirrors TS template-literal `${v}` interpolation:
-// undefined → "undefined", strings print RAW (no quotes), numbers decimal.
+// undefined â†’ "undefined", strings print RAW (no quotes), numbers decimal.
 func rawTemplate(v any) string {
 	switch t := v.(type) {
 	case nil:
@@ -457,7 +457,7 @@ func toFloat(v any) float64 {
 
 func numForMsg(id float64, ok bool) string {
 	if !ok {
-		// TS prints whatever t.id was via ${t.id} — raw semantics.
+		// TS prints whatever t.id was via ${t.id} â€” raw semantics.
 		return rawTemplate(id)
 	}
 	return numOrJson(id)
@@ -526,5 +526,5 @@ func HasTier(tiers []types.Tier, id types.TierId) bool {
 	return false
 }
 
-// PolicyBands returns the default complexity→tier bands.
-func PolicyBands() []policy.Band { return defaultComplexityToTier }
+// PolicyBands returns the default complexityâ†’tier bands.
+func PolicyBands() []routing.Band { return defaultComplexityToTier }

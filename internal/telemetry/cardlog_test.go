@@ -1,7 +1,7 @@
 // Cardlog tests: DDL/insert parity, aggregate SQL, and — critically — the
 // cross-read gate: a database written by the TS engine (node:sqlite) must be
 // readable by the Go engine, and vice versa.
-package cardlog
+package telemetry
 
 import (
 	"database/sql"
@@ -36,7 +36,7 @@ func sampleCard() *types.RouteCard {
 
 func TestWriteThenReadBack(t *testing.T) {
 	dir := t.TempDir()
-	cl, err := New(dir)
+	cl, err := NewCardLog(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestWriteThenReadBack(t *testing.T) {
 	}
 
 	// Aggregations run on the same table (reopen for the query).
-	cl2, err := New(dir)
+	cl2, err := NewCardLog(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +129,7 @@ func TestDatabaseCrossRead(t *testing.T) {
 	}
 	dir := t.TempDir()
 	copyFile(t, path, filepath.Join(dir, "route-cards.db"))
-	cl, err := New(dir)
+	cl, err := NewCardLog(dir)
 	if err != nil {
 		t.Fatalf("opening TS-written db: %v", err)
 	}

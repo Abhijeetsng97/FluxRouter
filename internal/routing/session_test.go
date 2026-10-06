@@ -1,5 +1,5 @@
-// Package session test: ports session tests from old/tests/unit.test.ts.
-package session
+// package routing test: ports session tests from old/tests/unit.test.ts.
+package routing
 
 import (
 	"testing"
@@ -60,7 +60,7 @@ func TestSessionIDRecordedVectors(t *testing.T) {
 }
 
 func TestStickyStorePinGetRePin(t *testing.T) {
-	store := NewStore()
+	store := NewSessionStore()
 	defer store.Dispose()
 	id := "sess1"
 	if have := store.Get(id); have != nil {
@@ -80,9 +80,9 @@ func TestStickyStorePinGetRePin(t *testing.T) {
 }
 
 func TestStoreTTLExpiry(t *testing.T) {
-	store := &Store{sessions: map[string]*State{}} // no sweep goroutine for the test
+	store := &SessionStore{sessions: map[string]*SessionState{}} // no sweep goroutine for the test
 	id := "old"
-	store.sessions[id] = &State{Tier: 1, Model: "m", Upstream: "u", PinnedAt: FormatISO(time.Now().Add(-2 * TTL)), Turns: 3}
+	store.sessions[id] = &SessionState{Tier: 1, Model: "m", Upstream: "u", PinnedAt: FormatISO(time.Now().Add(-2 * TTL)), Turns: 3}
 	if got := store.Get(id); got != nil {
 		t.Fatal("expired session should report missing")
 	}

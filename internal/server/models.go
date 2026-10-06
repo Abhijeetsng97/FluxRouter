@@ -1,6 +1,6 @@
-// Package models mirrors old/src/models.ts: the /v1/models response.
+// package server mirrors old/src/models.ts: the /v1/models response.
 // The alias-only default and the x_flux_* tag keys are contract.
-package models
+package server
 
 import (
 	"fmt"
@@ -10,7 +10,7 @@ import (
 )
 
 // Entry mirrors models.ts ModelEntry.
-type Entry struct {
+type ModelEntry struct {
 	ID         string `json:"id"`
 	Object     string `json:"object"`
 	Created    int64  `json:"created"`
@@ -19,15 +19,15 @@ type Entry struct {
 	XFluxUpstream *string `json:"x_flux_upstream,omitempty"`
 }
 
-// Response mirrors models.ts ModelsResponse.
-type Response struct {
-	Object string  `json:"object"`
-	Data   []Entry `json:"data"`
+// ModelsResponse mirrors models.ts ModelsResponse.
+type ModelsResponse struct {
+	Object string       `json:"object"`
+	Data   []ModelEntry `json:"data"`
 }
 
-// BuildResponse mirrors models.ts buildModelsResponse.
-func BuildResponse(cfg config.Config) Response {
-	data := []Entry{{
+// BuildModelsResponse mirrors models.ts buildModelsResponse.
+func BuildModelsResponse(cfg config.Config) ModelsResponse {
+	data := []ModelEntry{{
 		ID: types.FLUXModelAlias, Object: "model", Created: 0, OwnedBy: "fluxrouter",
 	}}
 	if cfg.Server.ListTierModels {
@@ -35,7 +35,7 @@ func BuildResponse(cfg config.Config) Response {
 			for _, m := range tier.Models {
 				tierID := int(tier.ID)
 				up := string(m.Upstream)
-				data = append(data, Entry{
+				data = append(data, ModelEntry{
 					ID: m.ID, Object: "model", Created: 0,
 					OwnedBy:    fmt.Sprintf("fluxrouter/tier-%d", tierID),
 				XFluxTier:     &tierID,
@@ -44,5 +44,5 @@ func BuildResponse(cfg config.Config) Response {
 			}
 		}
 	}
-	return Response{Object: "list", Data: data}
+	return ModelsResponse{Object: "list", Data: data}
 }

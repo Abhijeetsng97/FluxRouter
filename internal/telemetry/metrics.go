@@ -1,8 +1,8 @@
-// Package metrics mirrors old/src/metrics.ts: Prometheus text output.
+// package telemetry mirrors old/src/metrics.ts: Prometheus text output.
 // Names, HELP/TYPE lines, and the quantile formula are part of the contract
 // (dashboards may scrape them) — quantile uses sorted[min(len-1, floor(q*len))],
 // histogram reservoir caps at 512 samples with random replacement.
-package metrics
+package telemetry
 
 import (
 	"fmt"
@@ -21,7 +21,7 @@ type Metrics struct {
 }
 
 // New creates an empty registry.
-func New() *Metrics {
+func NewMetrics() *Metrics {
 	return &Metrics{
 		counters:   map[string]float64{},
 		histograms: map[string][]float64{},

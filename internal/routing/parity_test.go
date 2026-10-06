@@ -5,7 +5,7 @@
 //
 // External test package (policy_test) so it may import internal/config,
 // which itself imports policy.
-package policy_test
+package routing_test
 
 import (
 	"encoding/json"
@@ -15,7 +15,7 @@ import (
 	"testing"
 
 	"github.com/abhijeet/fluxrouter/internal/config"
-	"github.com/abhijeet/fluxrouter/internal/policy"
+	"github.com/abhijeet/fluxrouter/internal/routing"
 	"github.com/abhijeet/fluxrouter/internal/types"
 )
 
@@ -73,9 +73,9 @@ func cls(over func(*types.ClassificationResult)) types.ClassificationResult {
 }
 
 // mkConfig mirrors the generator's mkInput().config for the default config.
-func mkConfig() policy.PolicyConfig {
+func mkConfig() routing.PolicyConfig {
 	cfg := config.DefaultConfig()
-	return policy.PolicyConfig{
+	return routing.PolicyConfig{
 		MinConfidence:               cfg.Jev.MinConfidence,
 		TrivialNoul:                 cfg.Jev.TrivialNoul,
 		EscalateOnlyAboveComplexity: cfg.Jev.EscalateOnlyAboveComplexity,
@@ -87,18 +87,18 @@ func mkConfig() policy.PolicyConfig {
 	}
 }
 
-func policyOverrides(ovs []config.ConfigOverride) []policy.Override {
-	out := make([]policy.Override, 0, len(ovs))
+func policyOverrides(ovs []config.ConfigOverride) []routing.Override {
+	out := make([]routing.Override, 0, len(ovs))
 	for _, ov := range ovs {
-		out = append(out, policy.Override{Category: ov.Category, MinComplexity: ov.MinComplexity, Tier: ov.Tier})
+		out = append(out, routing.Override{Category: ov.Category, MinComplexity: ov.MinComplexity, Tier: ov.Tier})
 	}
 	return out
 }
 
 // mkInput mirrors the generator's mkInput().
-func mkInput(over func(*policy.Input)) policy.Input {
+func mkInput(over func(*routing.Input)) routing.Input {
 	cfg := config.DefaultConfig()
-	in := policy.Input{
+	in := routing.Input{
 		Classification:  ptrCls(cls(nil)),
 		RequestTokens:   1000,
 		StickyTier:      nil,
@@ -121,47 +121,47 @@ func tierPtr(t types.TierId) *types.TierId { return &t }
 // exact order the generator pushed them.
 func namedCases(cfg config.Config) []struct {
 	name string
-	in   policy.Input
+	in   routing.Input
 } {
 	return []struct {
 		name string
-		in   policy.Input
+		in   routing.Input
 	}{
-		{"trivial bypass", mkInput(func(i *policy.Input) {
+		{"trivial bypass", mkInput(func(i *routing.Input) {
 			c := cls(func(c *types.ClassificationResult) { c.TrivialNoul = 0.97; c.Complexity = 2 })
 			i.Classification = &c
 		})},
-		{"no bypass below threshold", mkInput(func(i *policy.Input) {
+		{"no bypass below threshold", mkInput(func(i *routing.Input) {
 			c := cls(func(c *types.ClassificationResult) { c.TrivialNoul = 0.5 })
 			i.Classification = &c
 		})},
-		{"greeting override", mkInput(func(i *policy.Input) {
+		{"greeting override", mkInput(func(i *routing.Input) {
 			c := cls(func(c *types.ClassificationResult) { c.Category = "greeting_chitchat"; c.Complexity = 0.2 })
 			i.Classification = &c
 		})},
-		{"math override", mkInput(func(i *policy.Input) {
+		{"math override", mkInput(func(i *routing.Input) {
 			c := cls(func(c *types.ClassificationResult) { c.Category = "math"; c.Complexity = 1.3 })
 			i.Classification = &c
 		})},
-		{"low conf escalates", mkInput(func(i *policy.Input) {
+		{"low conf escalates", mkInput(func(i *routing.Input) {
 			c := cls(func(c *types.ClassificationResult) {
 				c.Category = "other"; c.Complexity = 0.9; c.CategoryConfidence = 0.2; c.ComplexityConfidence = 0.3
 			})
 			i.Classification = &c
 		})},
-		{"low conf no escalate trivial", mkInput(func(i *policy.Input) {
+		{"low conf no escalate trivial", mkInput(func(i *routing.Input) {
 			c := cls(func(c *types.ClassificationResult) {
 				c.Complexity = 0.02; c.CategoryConfidence = 0.46; c.ComplexityConfidence = 0.46
 			})
 			i.Classification = &c
 		})},
-		{"sticky reuse", mkInput(func(i *policy.Input) {
+		{"sticky reuse", mkInput(func(i *routing.Input) {
 			c := cls(func(c *types.ClassificationResult) { c.Complexity = 0.1 })
 			i.Classification = &c
 			i.StickyTier = tierPtr(2)
 		})},
-		{"jev unavailable default", mkInput(func(i *policy.Input) { i.Classification = nil })},
-		{"jev unavailable fallback tier 2", mkInput(func(i *policy.Input) {
+		{"jev unavailable default", mkInput(func(i *routing.Input) { i.Classification = nil })},
+		{"jev unavailable fallback tier 2", mkInput(func(i *routing.Input) {
 			i.Classification = nil
 			i.FallbackTier = tierPtr(2)
 		})},
@@ -182,7 +182,7 @@ func TestPolicyParityNamedVectors(t *testing.T) {
 			t.Fatalf("vector order mismatch at %d: generator=%q test=%q — regenerate fixtures", idx, vec.Name, tc.name)
 		}
 		t.Run(tc.name, func(t *testing.T) {
-			out := policy.RouteRequest(tc.in)
+			out := routing.RouteRequest(tc.in)
 			if out.Tier != types.TierId(vec.Tier) {
 				t.Fatalf("tier = %d, want %d", out.Tier, vec.Tier)
 			}
@@ -219,13 +219,13 @@ func TestPolicyParityContextGate(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Tiers[0].Models[0].Ctx = 8000
 	cfg.Tiers[1].Models[0].Ctx = 8000
-	in := mkInput(func(i *policy.Input) {
+	in := mkInput(func(i *routing.Input) {
 		c := cls(func(c *types.ClassificationResult) { c.Complexity = 0.2 })
 		i.Classification = &c
 		i.RequestTokens = 50000
 		i.Tiers = cfg.Tiers
 	})
-	out := policy.RouteRequest(in)
+	out := routing.RouteRequest(in)
 	if out.Tier != types.TierId(vec.Tier) || string(out.Reason) != vec.Reason {
 		t.Fatalf("got %d/%s, want %d/%s", out.Tier, out.Reason, vec.Tier, vec.Reason)
 	}
@@ -239,17 +239,17 @@ func TestPolicyParityCostGuard(t *testing.T) {
 	cfg.Tiers[3].Models[0] = types.TierModel{Upstream: types.UpstreamOllama, ID: "expensive", Ctx: 1000000, In: 75, Out: 75}
 	cfg.Policy.Overrides = append(cfg.Policy.Overrides, config.ConfigOverride{Category: "tool_planning", Tier: 3})
 	base := mkConfig()
-	in := mkInput(func(i *policy.Input) {
+	in := mkInput(func(i *routing.Input) {
 		c := cls(func(c *types.ClassificationResult) { c.Category = "tool_planning"; c.Complexity = 0.3; c.TrivialNoul = 0.1 })
 		i.Classification = &c
 		i.RequestTokens = 300000
 		i.Tiers = cfg.Tiers
 		i.BudgetTokensOut = 2000
 		mut := base
-		mut.Overrides = append(mut.Overrides, policy.Override{Category: "tool_planning", Tier: 3})
+		mut.Overrides = append(mut.Overrides, routing.Override{Category: "tool_planning", Tier: 3})
 		i.Config = mut
 	})
-	out := policy.RouteRequest(in)
+	out := routing.RouteRequest(in)
 	if out.Tier != types.TierId(vec.Tier) || string(out.Reason) != vec.Reason {
 		t.Fatalf("got %d/%s, want %d/%s", out.Tier, out.Reason, vec.Tier, vec.Reason)
 	}
@@ -261,13 +261,13 @@ func TestPolicyParityJevFallbackContextGate(t *testing.T) {
 	vec := findVector(v, "jev fallback context gate")
 	cfg := config.DefaultConfig()
 	cfg.Tiers[1].Models[0].Ctx = 4000
-	in := mkInput(func(i *policy.Input) {
+	in := mkInput(func(i *routing.Input) {
 		i.Classification = nil
 		i.RequestTokens = 50000
 		i.Tiers = cfg.Tiers
 		i.FallbackTier = tierPtr(1)
 	})
-	out := policy.RouteRequest(in)
+	out := routing.RouteRequest(in)
 	if out.Tier != types.TierId(vec.Tier) || string(out.Reason) != vec.Reason {
 		t.Fatalf("got %d/%s, want %d/%s", out.Tier, out.Reason, vec.Tier, vec.Reason)
 	}
@@ -279,7 +279,7 @@ func TestComplexityToTierParity(t *testing.T) {
 	bands := config.DefaultConfig().Policy.Default.ComplexityToTier
 	inputs := []float64{0, 0.7, 0.9, 1.7, 2.0, 50}
 	for i, c := range inputs {
-		got := policy.ComplexityToTier(c, bands)
+		got := routing.ComplexityToTier(c, bands)
 		if int64(got) != v.ComplexityToTier[i] {
 			t.Fatalf("complexityToTier(%v) = %d, want %d", c, int64(got), v.ComplexityToTier[i])
 		}
@@ -301,7 +301,7 @@ func TestApplyOverridesParity(t *testing.T) {
 		{"other", 2, nil, 3},
 	}
 	for _, tc := range cases {
-		got := policy.ApplyOverrides(tc.cat, tc.comp, ovs)
+		got := routing.ApplyOverrides(tc.cat, tc.comp, ovs)
 		switch want := tc.want.(type) {
 		case nil:
 			if got != nil {
@@ -338,19 +338,19 @@ func TestStickyEscapeParity(t *testing.T) {
 	cfg := config.DefaultConfig()
 	bands := cfg.Policy.Default.ComplexityToTier
 	ovs := policyOverrides(cfg.Policy.Overrides)
-	esc := policy.StickyEscape(
+	esc := routing.StickyEscape(
 		1,
 		cls(func(c *types.ClassificationResult) { c.Category = "math"; c.Complexity = 1.5 }),
 		bands, ovs, cfg.Sticky.EscapeConfidence,
 	)
 	assertTierPtr(t, esc, v.StickyEscape[0], "escape high confidence")
-	esc = policy.StickyEscape(
+	esc = routing.StickyEscape(
 		1,
 		cls(func(c *types.ClassificationResult) { c.Category = "math"; c.Complexity = 1.5; c.CategoryConfidence = 0.3; c.ComplexityConfidence = 0.3 }),
 		bands, ovs, cfg.Sticky.EscapeConfidence,
 	)
 	assertTierPtr(t, esc, v.StickyEscape[1], "escape low confidence")
-	esc = policy.StickyEscape(
+	esc = routing.StickyEscape(
 		2,
 		cls(func(c *types.ClassificationResult) { c.Complexity = 0.1 }),
 		bands, ovs, cfg.Sticky.EscapeConfidence,

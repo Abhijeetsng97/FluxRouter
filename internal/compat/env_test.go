@@ -1,5 +1,5 @@
 // Env tests: ports old/tests/unit.test.ts loadDotEnv cases (item 18).
-package env
+package compat
 
 import (
 	"os"
@@ -23,7 +23,7 @@ func TestLoadFillsMissingKeysRealEnvWins(t *testing.T) {
 		}
 	}()
 
-	res := Load(a)
+	res := LoadDotEnv(a)
 	if len(res.Loaded) != 1 || res.Loaded[0] != a {
 		t.Fatalf("loaded = %v, want [%s]", res.Loaded, a)
 	}
@@ -34,7 +34,7 @@ func TestLoadFillsMissingKeysRealEnvWins(t *testing.T) {
 		t.Fatal("real env must never be overridden")
 	}
 	// Loading another file must not override values set by the first.
-	Load(b)
+	LoadDotEnv(b)
 	if os.Getenv("FLUX_T_SHARED") != "from_a" {
 		t.Fatal("first-loaded file must win")
 	}
@@ -44,7 +44,7 @@ func TestLoadFillsMissingKeysRealEnvWins(t *testing.T) {
 }
 
 func TestLoadMissingFileIsNoop(t *testing.T) {
-	res := Load("definitely-not-a-file.env")
+	res := LoadDotEnv("definitely-not-a-file.env")
 	if len(res.Loaded) != 0 {
 		t.Fatalf("loaded = %v, want empty", res.Loaded)
 	}
@@ -54,7 +54,7 @@ func TestLoadQuotedValuesAndComments(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "q.env")
 	_ = os.WriteFile(p, []byte("# comment\nFLUX_T_Q=\"quoted value\"\nFLUX_T_S='single'\nexport FLUX_T_E=exported\nFLUX_T_NOEq\n"), 0o644)
-	res := Load(p)
+	res := LoadDotEnv(p)
 	if len(res.Loaded) != 1 {
 		t.Fatalf("loaded = %v", res.Loaded)
 	}

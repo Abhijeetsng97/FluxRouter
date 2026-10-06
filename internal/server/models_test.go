@@ -1,5 +1,5 @@
 // Models tests: alias-only default, tier listing, x_flux tags.
-package models
+package server
 
 import (
 	"encoding/json"
@@ -9,7 +9,7 @@ import (
 )
 
 func TestBuildResponseAliasOnlyByDefault(t *testing.T) {
-	resp := BuildResponse(config.DefaultConfig())
+	resp := BuildModelsResponse(config.DefaultConfig())
 	if len(resp.Data) != 1 || resp.Data[0].ID != "flux" || resp.Object != "list" {
 		t.Fatalf("default models = %+v", resp)
 	}
@@ -22,7 +22,7 @@ func TestBuildResponseAliasOnlyByDefault(t *testing.T) {
 func TestBuildResponseListTierModels(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Server.ListTierModels = true
-	resp := BuildResponse(cfg)
+	resp := BuildModelsResponse(cfg)
 	if len(resp.Data) != 5 {
 		t.Fatalf("data len = %d, want 5 (alias + 4 tiers)", len(resp.Data))
 	}

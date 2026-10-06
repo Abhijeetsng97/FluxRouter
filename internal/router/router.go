@@ -11,13 +11,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/abhijeet/fluxrouter/internal/cardlog"
 	"github.com/abhijeet/fluxrouter/internal/config"
-	"github.com/abhijeet/fluxrouter/internal/cost"
 	"github.com/abhijeet/fluxrouter/internal/jev"
-	"github.com/abhijeet/fluxrouter/internal/metrics"
-	"github.com/abhijeet/fluxrouter/internal/policy"
-	"github.com/abhijeet/fluxrouter/internal/session"
+	"github.com/abhijeet/fluxrouter/internal/routing"
+	"github.com/abhijeet/fluxrouter/internal/telemetry"
 	"github.com/abhijeet/fluxrouter/internal/types"
 	"github.com/abhijeet/fluxrouter/internal/upstream"
 )
@@ -154,19 +151,19 @@ func jevMessages(ms []ChatMessage) []jev.Message {
 }
 
 // costMessages converts to the cost package shape.
-func costMessages(ms []ChatMessage) []cost.Message {
-	out := make([]cost.Message, len(ms))
+func routingMessages(ms []ChatMessage) []routing.Message {
+	out := make([]routing.Message, len(ms))
 	for i, m := range ms {
-		out[i] = cost.Message{Content: m.Content}
+		out[i] = routing.Message{Content: m.Content}
 	}
 	return out
 }
 
 // sessionMessages converts to the session package shape.
-func sessionMessages(ms []ChatMessage) []session.Message {
-	out := make([]session.Message, len(ms))
+func sessionMessagesOf(ms []ChatMessage) []routing.Message {
+	out := make([]routing.Message, len(ms))
 	for i, m := range ms {
-		out[i] = session.Message{Role: m.Role, Content: m.Content}
+		out[i] = routing.Message{Role: m.Role, Content: m.Content}
 	}
 	return out
 }
@@ -176,15 +173,15 @@ type Deps struct {
 	Config    *config.Config
 	Upstreams *upstream.Client
 	Creds     upstream.Credentials
-	CardLog   *cardlog.CardLog
-	Metrics   *metrics.Metrics
-	Sessions  *session.Store
+	CardLog   *telemetry.CardLog
+	Metrics   *telemetry.Metrics
+	Sessions  *routing.SessionStore
 }
 
 // Service mirrors router.ts RouterService.
 type Service struct {
 	deps     Deps
-	sessions *session.Store
+	sessions *routing.SessionStore
 	ownsStore bool
 }
 
@@ -194,7 +191,7 @@ func NewService(deps Deps) *Service {
 	if deps.Sessions != nil {
 		s.sessions = deps.Sessions
 	} else {
-		s.sessions = session.NewStore()
+		s.sessions = routing.NewSessionStore()
 		s.ownsStore = true
 	}
 	return s
@@ -217,9 +214,9 @@ func (s *Service) jevOptions() jev.Options {
 	}
 }
 
-func (s *Service) policyConfig() policy.PolicyConfig {
+func (s *Service) policyConfig() routing.PolicyConfig {
 	cfg := s.deps.Config
-	return policy.PolicyConfig{
+	return routing.PolicyConfig{
 		MinConfidence:               cfg.Jev.MinConfidence,
 		TrivialNoul:                 cfg.Jev.TrivialNoul,
 		EscalateOnlyAboveComplexity: cfg.Jev.EscalateOnlyAboveComplexity,
@@ -231,10 +228,10 @@ func (s *Service) policyConfig() policy.PolicyConfig {
 	}
 }
 
-func overridesOf(ovs []config.ConfigOverride) []policy.Override {
-	out := make([]policy.Override, 0, len(ovs))
+func overridesOf(ovs []config.ConfigOverride) []routing.Override {
+	out := make([]routing.Override, 0, len(ovs))
 	for _, ov := range ovs {
-		out = append(out, policy.Override{Category: ov.Category, MinComplexity: ov.MinComplexity, Tier: ov.Tier})
+		out = append(out, routing.Override{Category: ov.Category, MinComplexity: ov.MinComplexity, Tier: ov.Tier})
 	}
 	return out
 }
@@ -242,8 +239,8 @@ func overridesOf(ovs []config.ConfigOverride) []policy.Override {
 // Decide mirrors router.ts decide: classify + policy + sticky escape + pin.
 func (s *Service) Decide(ctx context.Context, req *ChatRequest) (types.RouteDecision, error) {
 	cfg := s.deps.Config
-	requestTokens := cost.EstimateTokens(costMessages(req.Messages))
-	sessionID := session.SessionIDFor(sessionMessages(req.Messages))
+	requestTokens := routing.EstimateTokens(routingMessages(req.Messages))
+	sessionID := routing.SessionIDFor(sessionMessagesOf(req.Messages))
 
 	var stickyTier *types.TierId
 	if cfg.Sticky.Enabled {
@@ -273,7 +270,7 @@ func (s *Service) Decide(ctx context.Context, req *ChatRequest) (types.RouteDeci
 		jevMs = time.Since(started).Milliseconds()
 	}
 
-	outcome := policy.RouteRequest(policy.Input{
+	outcome := routing.RouteRequest(routing.Input{
 		Classification: cls,
 		RequestTokens:  requestTokens,
 		StickyTier:     stickyTier,
@@ -284,7 +281,7 @@ func (s *Service) Decide(ctx context.Context, req *ChatRequest) (types.RouteDeci
 
 	// Sticky escape: pinned session upgrades when the new turn clearly needs more.
 	if cfg.Sticky.Enabled && stickyTier != nil && cls != nil {
-		escape := policy.StickyEscape(
+		escape := routing.StickyEscape(
 			*stickyTier,
 			*cls,
 			cfg.Policy.Default.ComplexityToTier,
@@ -299,7 +296,7 @@ func (s *Service) Decide(ctx context.Context, req *ChatRequest) (types.RouteDeci
 
 	// Sticky bookkeeping: pins on first turn, refreshes on every later turn.
 	if cfg.Sticky.Enabled {
-		tierObj := policy.FindTier(cfg.Tiers, outcome.Tier)
+		tierObj := routing.FindTier(cfg.Tiers, outcome.Tier)
 		if tierObj != nil && len(tierObj.Models) > 0 {
 			m := tierObj.Models[0]
 			if stickyTier != nil {
@@ -310,7 +307,7 @@ func (s *Service) Decide(ctx context.Context, req *ChatRequest) (types.RouteDeci
 		}
 	}
 
-	tierObj := policy.FindTier(cfg.Tiers, outcome.Tier)
+	tierObj := routing.FindTier(cfg.Tiers, outcome.Tier)
 	if tierObj == nil && len(cfg.Tiers) > 0 {
 		tierObj = &cfg.Tiers[0]
 	}
@@ -345,7 +342,7 @@ type RouteDecisionResult struct {
 // (TS `{...rawBody, model: id}` keeps the original key position).
 func (s *Service) Execute(ctx context.Context, rawBodyJSON []byte, req *ChatRequest, requestedModel string, startTs time.Time) (*ExecuteResult, error) {
 	cfg := s.deps.Config
-	sessionID := session.SessionIDFor(sessionMessages(req.Messages))
+	sessionID := routing.SessionIDFor(sessionMessagesOf(req.Messages))
 	decision, err := s.Decide(ctx, req)
 	if err != nil {
 		return nil, err
@@ -354,7 +351,7 @@ func (s *Service) Execute(ctx context.Context, rawBodyJSON []byte, req *ChatRequ
 	if decision.JevLatencyMs != nil {
 		jevMs = *decision.JevLatencyMs
 	}
-	tier := policy.FindTier(cfg.Tiers, decision.Tier)
+	tier := routing.FindTier(cfg.Tiers, decision.Tier)
 	if tier == nil {
 		return nil, fmt.Errorf("tier %d vanished", decision.Tier)
 	}
@@ -373,7 +370,7 @@ func (s *Service) Execute(ctx context.Context, rawBodyJSON []byte, req *ChatRequ
 
 	model := tier.Models[0]
 	card := &types.RouteCard{
-		TS:               session.FormatISO(startTs),
+		TS:               routing.FormatISO(startTs),
 		SessionID:        sessionID,
 		Tier:             decision.Tier,
 		Model:            decision.Model,
@@ -382,7 +379,7 @@ func (s *Service) Execute(ctx context.Context, rawBodyJSON []byte, req *ChatRequ
 		Category:         decision.Category,
 		Complexity:       decision.Complexity,
 		Confidence:       decision.Confidence,
-		RequestTokensEst: cost.EstimateTokens(costMessages(req.Messages)),
+		RequestTokensEst: routing.EstimateTokens(routingMessages(req.Messages)),
 		Usage:            usage,
 		CostUsd:          CostFromUsage(usage, model),
 		LatenciesMs:      types.Latencies{Jev: jevMs, Upstream: upstreamMs, Total: totalMs},

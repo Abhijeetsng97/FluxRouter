@@ -12,11 +12,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/abhijeet/fluxrouter/internal/cardlog"
 	"github.com/abhijeet/fluxrouter/internal/config"
-	"github.com/abhijeet/fluxrouter/internal/metrics"
-	"github.com/abhijeet/fluxrouter/internal/router"
 	"github.com/abhijeet/fluxrouter/internal/jev"
+	"github.com/abhijeet/fluxrouter/internal/router"
+	"github.com/abhijeet/fluxrouter/internal/telemetry"
 	"github.com/abhijeet/fluxrouter/internal/upstream"
 )
 
@@ -64,13 +63,13 @@ func setup(t *testing.T, jevBody string, upstreamStatus int, upstreamBody string
 	cfg.Upstreams.Ollama.BaseURL = upSrv.URL
 	cfg.Jev.BaseURL = jevSrv.URL
 
-	cl, err := cardlog.New(dir)
+	cl, err := telemetry.NewCardLog(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { cl.Close() })
 
-	m := metrics.New()
+	m := telemetry.NewMetrics()
 	creds := upstream.Credentials{
 		Ollama:     upstream.Endpoint{BaseURL: upSrv.URL, APIKey: "test-key"},
 		OpenRouter: upstream.Endpoint{BaseURL: upSrv.URL, APIKey: ""},
@@ -241,12 +240,12 @@ func TestChatFailoverExhaustedMessageWhenNoLaneAttempted(t *testing.T) {
 	cfg.DataDir = dir
 	cfg.Upstreams.Ollama.BaseURL = upSrv.URL
 	cfg.Jev.BaseURL = jevSrv.URL
-	cl, err := cardlog.New(dir)
+	cl, err := telemetry.NewCardLog(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer cl.Close()
-	m := metrics.New()
+	m := telemetry.NewMetrics()
 	creds := upstream.Credentials{
 		Ollama:     upstream.Endpoint{BaseURL: upSrv.URL, APIKey: ""}, // no key
 		OpenRouter: upstream.Endpoint{BaseURL: upSrv.URL, APIKey: ""}, // no key

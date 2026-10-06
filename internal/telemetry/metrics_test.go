@@ -1,5 +1,5 @@
 // Metrics tests: quantile formula and snapshot format (contract).
-package metrics
+package telemetry
 
 import (
 	"strings"
@@ -9,7 +9,7 @@ import (
 func TestQuantileFormulaMatchesTS(t *testing.T) {
 	// TS: sorted[min(len-1, floor(q*len))]. For 4 samples [1,2,3,4]:
 	// p50 -> floor(2) = idx 2 -> 3; p90 -> floor(3.6)=3 -> 4.
-	m := New()
+	m := NewMetrics()
 	for _, v := range []float64{1, 2, 3, 4} {
 		m.Observe("h", v)
 	}
@@ -23,7 +23,7 @@ func TestQuantileFormulaMatchesTS(t *testing.T) {
 }
 
 func TestReservoirCap512RandomReplacement(t *testing.T) {
-	m := New()
+	m := NewMetrics()
 	for i := 0; i < 2000; i++ {
 		m.Observe("h", float64(i))
 	}
@@ -36,7 +36,7 @@ func TestReservoirCap512RandomReplacement(t *testing.T) {
 }
 
 func TestCountersAndFormat(t *testing.T) {
-	m := New()
+	m := NewMetrics()
 	m.Inc("requests_total", 1)
 	m.Inc("tier_0_total", 1)
 	m.Inc("cost_usd_total_micro", 42)

@@ -12,8 +12,7 @@ import (
 	"os"
 
 	"github.com/abhijeet/fluxrouter/internal/config"
-	"github.com/abhijeet/fluxrouter/internal/cost"
-	"github.com/abhijeet/fluxrouter/internal/policy"
+	"github.com/abhijeet/fluxrouter/internal/routing"
 	"github.com/abhijeet/fluxrouter/internal/types"
 )
 
@@ -91,13 +90,13 @@ func parityMain(args []string) int {
 		if fx.ConfigPatch != nil {
 			cfg = applyConfigPatch(base, fx.ConfigPatch)
 		}
-		in := policy.Input{
+		in := routing.Input{
 			RequestTokens:  fx.RequestTokens,
 			StickyTier:     tierIdPtr(fx.StickyTier),
 			Tiers:          cfg.Tiers,
 			FallbackTier:   tierIdPtr(fx.FallbackTier),
 			BudgetTokensOut: fx.BudgetTokensOut,
-			Config: policy.PolicyConfig{
+			Config: routing.PolicyConfig{
 				MinConfidence:               cfg.Jev.MinConfidence,
 				TrivialNoul:                 cfg.Jev.TrivialNoul,
 				EscalateOnlyAboveComplexity: cfg.Jev.EscalateOnlyAboveComplexity,
@@ -118,7 +117,7 @@ func parityMain(args []string) int {
 				JevModel:             "fixture",
 			}
 		}
-		out := policy.RouteRequest(in)
+		out := routing.RouteRequest(in)
 		total++
 		ok := out.Tier == types.TierId(fx.Expected.Tier) &&
 			string(out.Reason) == fx.Expected.Reason &&
@@ -195,10 +194,10 @@ func numAny(v any) (float64, bool) {
 	return 0, false
 }
 
-func overridesOfFix(ovs []config.ConfigOverride) []policy.Override {
-	out := make([]policy.Override, 0, len(ovs))
+func overridesOfFix(ovs []config.ConfigOverride) []routing.Override {
+	out := make([]routing.Override, 0, len(ovs))
 	for _, ov := range ovs {
-		out = append(out, policy.Override{Category: ov.Category, MinComplexity: ov.MinComplexity, Tier: ov.Tier})
+		out = append(out, routing.Override{Category: ov.Category, MinComplexity: ov.MinComplexity, Tier: ov.Tier})
 	}
 	return out
 }
@@ -237,4 +236,4 @@ func configFromMap(m map[string]any) (config.Config, error) {
 	return c, nil
 }
 
-var _ = cost.ProjectedCost // referenced by report frontier-cost math
+var _ = routing.ProjectedCost // referenced by report frontier-cost math

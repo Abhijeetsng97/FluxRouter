@@ -1,5 +1,5 @@
-// Package jsstr tests: UTF-16 semantics against recorded JS behavior.
-package jsstr
+// package compat tests: UTF-16 semantics against recorded JS behavior.
+package compat
 
 import "testing"
 

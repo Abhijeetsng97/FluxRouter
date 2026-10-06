@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/abhijeet/fluxrouter/internal/jsstr"
+	"github.com/abhijeet/fluxrouter/internal/compat"
 	"github.com/abhijeet/fluxrouter/internal/types"
 )
 
@@ -82,7 +82,7 @@ type Message struct {
 
 // BuildJevState mirrors classify.ts buildJevState: head+tail excerpts with
 // [LAST]/[HIST-n] prefixes and "…[truncated]…" markers. JS slice semantics
-// (UTF-16 units, negative indices) are replicated via jsstr.
+// (UTF-16 units, negative indices) are replicated via compat.
 func BuildJevState(messages []Message, maxCharsEach int) string {
 	if maxCharsEach <= 0 {
 		maxCharsEach = 2000
@@ -93,16 +93,16 @@ func BuildJevState(messages []Message, maxCharsEach int) string {
 		isLast := i == lastIdx
 		content := m.Content
 		var slice string
-		if jsstr.JsLen(content) <= maxCharsEach {
+		if compat.JsLen(content) <= maxCharsEach {
 			slice = content
 		} else if isLast {
 			// head+tail of the final (most important) message
 			half := maxCharsEach / 2 // floor, matches Math.floor(maxCharsEach / 2)
-			slice = jsstr.SliceUTF16(content, 0, half) +
+			slice = compat.SliceUTF16(content, 0, half) +
 				" …[truncated]… " +
-				jsstr.SliceToEndUTF16(content, jsstr.JsLen(content)-half) // JS: content.slice(-half)
+				compat.SliceToEndUTF16(content, compat.JsLen(content)-half) // JS: content.slice(-half)
 		} else {
-			slice = jsstr.SliceUTF16(content, 0, maxCharsEach/4) + " …[truncated]…"
+			slice = compat.SliceUTF16(content, 0, maxCharsEach/4) + " …[truncated]…"
 		}
 		label := "[LAST]"
 		if !isLast {

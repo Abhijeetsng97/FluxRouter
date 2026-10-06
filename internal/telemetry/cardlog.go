@@ -1,8 +1,8 @@
-// Package cardlog mirrors old/src/cardlog.ts: JSONL append + SQLite row per
+// package telemetry mirrors old/src/cardlog.ts: JSONL append + SQLite row per
 // request. The DDL, INSERT, and aggregate SQL are contract — the Go binary
 // must read AND write databases produced by the TS engine unchanged
 // (old databases stay queryable; no migration).
-package cardlog
+package telemetry
 
 import (
 	"database/sql"
@@ -56,7 +56,7 @@ const insertSQL = `INSERT INTO route_cards
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
 
 // New mirrors cardlog.ts constructor: mkdir, DDL, prepared insert.
-func New(dataDir string) (*CardLog, error) {
+func NewCardLog(dataDir string) (*CardLog, error) {
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return nil, err
 	}

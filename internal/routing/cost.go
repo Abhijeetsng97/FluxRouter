@@ -1,14 +1,14 @@
-// Package cost mirrors old/src/cost.ts: token estimation, cost projection,
+// package routing mirrors old/src/cost.ts: token estimation, cost projection,
 // budget guards. Numbers must match the TS engine to the last bit for the
 // same inputs, so keep formulas in the exact same shape.
-package cost
+package routing
 
 import (
 	"fmt"
 	"math"
 	"strconv"
 
-	"github.com/abhijeet/fluxrouter/internal/jsstr"
+	"github.com/abhijeet/fluxrouter/internal/compat"
 )
 
 // TokenRates mirrors cost.ts TokenRates.
@@ -18,14 +18,18 @@ type TokenRates struct {
 	Out      float64 // $/M output
 }
 
-// Message is the minimal shape estimateTokens needs.
+// Message is the unified message shape: EstimateTokens reads Content;
+// SessionIDFor reads Role + Content � one type for both (cost.ts +
+// session.ts both consumed {role, content} in TS).
+
+
 type Message struct {
+	Role    string
 	Content string
 }
-
 // EstimateTokens mirrors cost.ts estimateTokens:
 // ceil((sum(chars) + 8*messages) / 4); 0 for zero messages.
-// JS `.length` counts UTF-16 code units, so use jsstr.JsLen — parity of the
+// JS `.length` counts UTF-16 code units, so use compat.JsLen — parity of the
 // route-card requestTokensEst field depends on this.
 func EstimateTokens(messages []Message) int64 {
 	if len(messages) == 0 {
@@ -33,7 +37,7 @@ func EstimateTokens(messages []Message) int64 {
 	}
 	var chars int64
 	for _, m := range messages {
-		chars += int64(jsstr.JsLen(m.Content)) + 8 // +8 role/overhead
+		chars += int64(compat.JsLen(m.Content)) + 8 // +8 role/overhead
 	}
 	return int64(math.Ceil(float64(chars) / 4))
 }

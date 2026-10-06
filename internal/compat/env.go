@@ -1,4 +1,4 @@
-// Package env mirrors old/src/env.ts: .env loading with JS-like precedence.
+// package compat mirrors old/src/env.ts: .env loading with JS-like precedence.
 //
 // Precedence (highest first):
 //  1. real process environment (never overridden)
@@ -9,7 +9,7 @@
 // TS used process.loadEnvFile, which never overrides set variables and loads
 // highest-precedence first. Go has no built-in loader, so this implements
 // dotenv parsing with the same never-override rule.
-package env
+package compat
 
 import (
 	"bufio"
@@ -25,7 +25,7 @@ type Result struct {
 
 // Load mirrors env.ts loadDotEnv: candidates in precedence order; a file only
 // fills keys not already present (in process env OR loaded by an earlier file).
-func Load(explicitPath string) Result {
+func LoadDotEnv(explicitPath string) Result {
 	candidates := []string{".env.local", ".env"}
 	if explicitPath != "" {
 		candidates = []string{explicitPath}

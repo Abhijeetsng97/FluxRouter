@@ -13,12 +13,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/abhijeet/fluxrouter/internal/cardlog"
+	"github.com/abhijeet/fluxrouter/internal/compat"
 	"github.com/abhijeet/fluxrouter/internal/config"
-	"github.com/abhijeet/fluxrouter/internal/env"
-	"github.com/abhijeet/fluxrouter/internal/metrics"
-	"github.com/abhijeet/fluxrouter/internal/models"
 	"github.com/abhijeet/fluxrouter/internal/router"
+	"github.com/abhijeet/fluxrouter/internal/telemetry"
 	"github.com/abhijeet/fluxrouter/internal/types"
 	"github.com/abhijeet/fluxrouter/internal/upstream"
 )
@@ -54,7 +52,7 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 type Handler struct {
 	Service *router.Service
 	Cfg     *config.Config
-	Metrics *metrics.Metrics
+	Metrics *telemetry.Metrics
 	Token   string // FLUX_AUTH_TOKEN ("" = auth disabled)
 }
 
@@ -91,7 +89,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
 	switch {
 	case r.Method == http.MethodGet && path == "/v1/models":
-		writeJSON(w, 200, models.BuildResponse(*h.Cfg))
+		writeJSON(w, 200, BuildModelsResponse(*h.Cfg))
 	case r.Method == http.MethodGet && path == "/metrics":
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = io.WriteString(w, h.Metrics.Snapshot())
@@ -188,7 +186,7 @@ func (h *Handler) handleChat(w http.ResponseWriter, r *http.Request) {
 // Run mirrors index.ts main: env → config → boot checks → serve.
 func Run(argv []string, version string) int {
 	opts := parseOpts(argv)
-	dotenv := env.Load(opts.envFile)
+	dotenv := compat.LoadDotEnv(opts.envFile)
 	if len(dotenv.Loaded) > 0 {
 		fmt.Printf("Loaded env file(s): %s (real environment variables take precedence)\n", strings.Join(dotenv.Loaded, ", "))
 	}
@@ -232,12 +230,12 @@ func Run(argv []string, version string) int {
 		fmt.Fprintln(os.Stderr, "  OpenRouter failover/burst lane is disabled; failover will use Ollama tiers only.")
 	}
 
-	cardLog, err := cardlog.New(cfg.DataDir)
+	cardLog, err := telemetry.NewCardLog(cfg.DataDir)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "cardlog init failed:", err)
 		return 1
 	}
-	m := metrics.New()
+	m := telemetry.NewMetrics()
 	creds := upstream.Credentials{
 		Ollama:     upstream.Endpoint{BaseURL: cfg.Upstreams.Ollama.BaseURL, APIKey: os.Getenv(cfg.Upstreams.Ollama.ApiKeyEnv)},
 		OpenRouter: upstream.Endpoint{BaseURL: cfg.Upstreams.OpenRouter.BaseURL, APIKey: os.Getenv(cfg.Upstreams.OpenRouter.ApiKeyEnv)},

@@ -1,9 +1,9 @@
-// Package jsstr implements JavaScript string semantics (UTF-16 code units)
+// package compat implements JavaScript string semantics (UTF-16 code units)
 // that several ports depend on: string length, and String.prototype.slice
 // with negative indices. Byte-level Go operations differ from JS for any
 // input containing non-BMP characters (emoji etc.) — these helpers keep the
 // Go engine byte-identical with the TS engine.
-package jsstr
+package compat
 
 import "unicode/utf8"
 

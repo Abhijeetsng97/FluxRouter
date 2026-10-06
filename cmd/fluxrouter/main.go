@@ -27,7 +27,7 @@ func main() {
 	case "config":
 		os.Exit(runConfig(args))
 	case "parity":
-		os.Exit(runParity(args))
+		os.Exit(parityMain(args))
 	case "version", "--version", "-v":
 		fmt.Println("fluxrouter v" + VERSION)
 		os.Exit(0)

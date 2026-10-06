@@ -1,16 +1,15 @@
-// Package policy mirrors old/src/policy.ts: context gate, 2D table, trivial
+// package routing mirrors old/src/policy.ts: context gate, 2D table, trivial
 // bypass, confidence escalation, cost guard. Every branch comment references
 // the TS line it ports; the golden fixture parity harness enforces identical
 // decisions, so do not "improve" any ordering here without regenerating
 // fixtures from the old/ engine in the same commit.
-package policy
+package routing
 
 import (
 	"encoding/json"
 	"fmt"
 	"math"
 
-	"github.com/abhijeet/fluxrouter/internal/cost"
 	"github.com/abhijeet/fluxrouter/internal/types"
 )
 
@@ -252,8 +251,8 @@ func RouteRequest(input Input) Outcome {
 			out = 2000
 		}
 		model := tierObj.Models[0]
-		projected := cost.ProjectedCost(input.RequestTokens, out,
-			cost.Rates{In: model.In, Out: model.Out})
+		projected := ProjectedCost(input.RequestTokens, out,
+			Rates{In: model.In, Out: model.Out})
 		if projected > cfg.PerRequestCapUsd {
 			notes = append(notes, fmt.Sprintf("projected $%.4f > cap $%g, downgrading", projected, cfg.PerRequestCapUsd))
 			if down := NearestCheaperFittingTier(input.Tiers, *tier, input.RequestTokens, cfg.PerRequestCapUsd, out); down != nil {
@@ -349,7 +348,7 @@ func NearestCheaperFittingTier(tiers []types.Tier, originalTier types.TierId, re
 			continue
 		}
 		m := cand.Models[0]
-		c := cost.ProjectedCost(requestTokens, budgetTokensOut, cost.Rates{In: m.In, Out: m.Out})
+		c := ProjectedCost(requestTokens, budgetTokensOut, Rates{In: m.In, Out: m.Out})
 		if c <= capUsd {
 			return &t
 		}
@@ -390,7 +389,7 @@ func projectedCostForTier(tiers []types.Tier, tier types.TierId, requestTokens i
 	if out == 0 {
 		out = 2000
 	}
-	return cost.ProjectedCost(requestTokens, out, cost.Rates{In: m.In, Out: m.Out})
+	return ProjectedCost(requestTokens, out, Rates{In: m.In, Out: m.Out})
 }
 
 func anyModelFits(t types.Tier, requestTokens int64) bool {

@@ -1,6 +1,7 @@
-// E2E binary test harness: stub Ollama + stub Jev, boots the real Go binary,
-// fires real requests. Run: go run ./internal/e2e (or `go test ./internal/e2e/`).
-package main
+// E2E binary test: stub Ollama + stub Jev, boots the real Go binary, fires
+// real requests against it, verifies routing + cards + metrics end to end.
+// Run: go test ./test/e2e/  (skips in -short mode)
+package e2e_test
 
 import (
 	"bytes"
@@ -12,20 +13,36 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"testing"
 	"time"
 )
 
-func main() {
-	if err := run(); err != nil {
-		fmt.Fprintln(os.Stderr, "E2E FAIL:", err)
-		os.Exit(1)
+func TestEndToEnd(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping binary-booting e2e in -short mode")
 	}
-	fmt.Println("E2E PASS")
+	if err := runE2E(t); err != nil {
+		t.Fatal(err)
+	}
 }
 
-func run() error {
-	dir, _ := os.MkdirTemp("", "flux-e2e")
-	defer os.RemoveAll(dir)
+// moduleRoot finds the repo root (the dir containing go.mod) so the test can
+// `go build` the binary regardless of where it is invoked from.
+func moduleRoot(t *testing.T) string {
+	t.Helper()
+	// Test runs with CWD = test/e2e; go.mod lives two levels up.
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "go.mod")); err != nil {
+		t.Fatalf("go.mod not found two levels above test (got %s): %v", root, err)
+	}
+	return root
+}
+
+func runE2E(t *testing.T) error {
+	dir := t.TempDir()
 
 	// Stub upstream: OpenAI-shaped 200 with usage.
 	upSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -71,14 +88,15 @@ func run() error {
 
 	// Start the binary.
 	bin := filepath.Join(dir, "fluxrouter.exe")
+	root := moduleRoot(t)
 	build := exec.Command("go", "build", "-o", bin, "./cmd/fluxrouter")
-	build.Dir = "."
+	build.Dir = root
 	if out, err := build.CombinedOutput(); err != nil {
 		return fmt.Errorf("build: %v\n%s", err, out)
 	}
 	cmd := exec.Command(bin, "serve", "--config", cfgPath, "--port", "18787")
 	cmd.Env = env
-	cmd.Dir = "."
+	cmd.Dir = root
 	if err := cmd.Start(); err != nil {
 		return err
 	}

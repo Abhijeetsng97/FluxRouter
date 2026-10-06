@@ -1,8 +1,8 @@
-// Package session mirrors old/src/session.ts: sticky session store with
+// package routing mirrors old/src/session.ts: sticky session store with
 // upward escape. The session id hash is part of the external contract (route
 // cards store it; flux report groups by it) — it must produce identical ids
 // to the TS engine for the same conversation.
-package session
+package routing
 
 import (
 	"crypto/sha256"
@@ -11,12 +11,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/abhijeet/fluxrouter/internal/jsstr"
+	"github.com/abhijeet/fluxrouter/internal/compat"
 	"github.com/abhijeet/fluxrouter/internal/types"
 )
 
 // State mirrors session.ts SessionState.
-type State struct {
+type SessionState struct {
 	Tier     types.TierId
 	Model    string
 	Upstream string
@@ -28,17 +28,17 @@ type State struct {
 const TTL = 6 * time.Hour
 
 // Store mirrors session.ts SessionStore.
-type Store struct {
+type SessionStore struct {
 	mu       sync.Mutex
-	sessions map[string]*State
+	sessions map[string]*SessionState
 	stop     chan struct{}
 	stopped  chan struct{}
 }
 
 // NewStore starts the 10-minute sweep goroutine (mirrors the setInterval).
-func NewStore() *Store {
-	s := &Store{
-		sessions: make(map[string]*State),
+func NewSessionStore() *SessionStore {
+	s := &SessionStore{
+		sessions: make(map[string]*SessionState),
 		stop:     make(chan struct{}),
 		stopped:  make(chan struct{}),
 	}
@@ -56,12 +56,6 @@ func NewStore() *Store {
 		}
 	}()
 	return s
-}
-
-// Message is the minimal input shape for SessionIDFor.
-type Message struct {
-	Role    string
-	Content string
 }
 
 // SessionIDFor mirrors session.ts sessionIdFor:
@@ -82,13 +76,13 @@ func SessionIDFor(messages []Message) string {
 			break
 		}
 	}
-	seed := strconv.Itoa(jsstr.JsLen(sys)) + ":" + sys + "\x00" + firstUser
+	seed := strconv.Itoa(compat.JsLen(sys)) + ":" + sys + "\x00" + firstUser
 	sum := sha256.Sum256([]byte(seed))
 	return hex.EncodeToString(sum[:])[:24]
 }
 
 // Get mirrors session.ts get: expired entries are deleted and report missing.
-func (s *Store) Get(sessionID string) *State {
+func (s *SessionStore) Get(sessionID string) *SessionState {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	st, ok := s.sessions[sessionID]
@@ -105,10 +99,10 @@ func (s *Store) Get(sessionID string) *State {
 }
 
 // Pin mirrors session.ts pin: first-turn pin with turns=1.
-func (s *Store) Pin(sessionID string, tier types.TierId, model, upstream string) {
+func (s *SessionStore) Pin(sessionID string, tier types.TierId, model, upstream string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.sessions[sessionID] = &State{
+	 s.sessions[sessionID] = &SessionState{
 		Tier:     tier,
 		Model:    model,
 		Upstream: upstream,
@@ -118,7 +112,7 @@ func (s *Store) Pin(sessionID string, tier types.TierId, model, upstream string)
 }
 
 // RePin mirrors session.ts rePin: update pinned tier; falls back to pin.
-func (s *Store) RePin(sessionID string, tier types.TierId, model, upstream string) {
+func (s *SessionStore) RePin(sessionID string, tier types.TierId, model, upstream string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if st, ok := s.sessions[sessionID]; ok {
@@ -129,11 +123,11 @@ func (s *Store) RePin(sessionID string, tier types.TierId, model, upstream strin
 		st.Turns++
 		return
 	}
-	s.sessions[sessionID] = &State{Tier: tier, Model: model, Upstream: upstream, PinnedAt: nowISO(), Turns: 1}
+	s.sessions[sessionID] = &SessionState{Tier: tier, Model: model, Upstream: upstream, PinnedAt: nowISO(), Turns: 1}
 }
 
 // BumpTurn mirrors session.ts bumpTurn.
-func (s *Store) BumpTurn(sessionID string) {
+func (s *SessionStore) BumpTurn(sessionID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if st, ok := s.sessions[sessionID]; ok {
@@ -143,7 +137,7 @@ func (s *Store) BumpTurn(sessionID string) {
 }
 
 // Sweep mirrors session.ts sweep: drop entries idle beyond TTL.
-func (s *Store) Sweep() {
+func (s *SessionStore) Sweep() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := time.Now()
@@ -156,14 +150,14 @@ func (s *Store) Sweep() {
 }
 
 // Size mirrors session.ts get size.
-func (s *Store) Size() int {
+func (s *SessionStore) Size() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return len(s.sessions)
 }
 
 // Dispose mirrors session.ts dispose: stop sweep, clear map.
-func (s *Store) Dispose() {
+func (s *SessionStore) Dispose() {
 	s.mu.Lock()
 	if s.stop != nil {
 		select {
@@ -172,7 +166,7 @@ func (s *Store) Dispose() {
 			close(s.stop)
 		}
 	}
-	s.sessions = make(map[string]*State)
+	s.sessions = make(map[string]*SessionState)
 	s.mu.Unlock()
 	select {
 	case <-s.stopped:

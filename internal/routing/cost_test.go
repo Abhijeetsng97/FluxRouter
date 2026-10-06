@@ -1,5 +1,5 @@
-// Package cost test: ports the cost-related tests from old/tests/unit.test.ts.
-package cost
+// package routing test: ports the cost-related tests from old/tests/unit.test.ts.
+package routing
 
 import (
 	"math"
