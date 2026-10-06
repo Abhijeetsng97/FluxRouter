@@ -218,4 +218,6 @@ Each change is a config edit; re-measure with a targeted run, not a full one.
 
 - [README.md](../README.md) → "Eval methodology" and "Measured results" — methodology and the reference snapshot
 - [HOW_IT_DECIDES.md](HOW_IT_DECIDES.md) — how a single decision is made (with `flux trace`)
-- [ROADMAP.md](../ROADMAP.md) — v0.2 makes these bands data-derived; v0.3 adds context economics
+- [ROADMAP.md](../ROADMAP.md) — v0.2 makes these bands data-derived; v0.3 is the Go
+  rewrite (the fixtures recorded here become its acceptance oracle); v0.4 adds context
+  economics

@@ -4,7 +4,8 @@
 
 > **Status: v0.1 — foundation.** Installable from source (`git clone` + `npm install`);
 > not yet published to npm. Roadmap: [v0.2 = calibrated routing + real-harness validation,
-> v0.3 = context economics](ROADMAP.md).
+> v0.3 = the Go rewrite (single binary, proven by its own audit trail),
+> v0.4 = context economics](ROADMAP.md).
 
 FluxRouter is a local OpenAI-compatible proxy that classifies every chat request with
 [Jev](https://jevwiki.ai) (TypeSafe's "System One" classifier — typed decisions with
@@ -330,9 +331,13 @@ Eval output explained, with the raw runs: **[docs/EVALS.md](docs/EVALS.md)**.
   `flux trace`. Measured 95.9% ±1-tier routing accuracy, trivial contract 100%.
 - **v0.2 (next)** — calibrated routing logic (bands derived from eval data, coding
   category floors), stickiness improvements (skip classification on sticky hits,
-  task-boundary downgrade), and sustained validation inside OpenCode / OpenChamber with a
-  published real-traffic report.
-- **v0.3** — context economics: compaction, trimming stale tool output, and reducing the
+  task-boundary downgrade), sustained validation inside OpenCode / OpenChamber with a
+  published real-traffic report, and the v0.3 groundwork: golden-decision fixtures and
+  a frozen compatibility contract.
+- **v0.3** — the Go rewrite: single ~15MB static binary, parity-proven against the TS
+  engine via golden fixtures + a week of live shadow dual-run, then published as release
+  assets for all platforms. See [docs/LANGUAGE_ANALYSIS.md](docs/LANGUAGE_ANALYSIS.md).
+- **v0.4** — context economics: compaction, trimming stale tool output, and reducing the
   skills / tool schemas injected per prompt based on the classified task; prompt-cache-aware
   routing.
 
