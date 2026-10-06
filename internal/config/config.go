@@ -207,6 +207,23 @@ func readErrMsg(err error) string {
 // and `flux config validate` against typed configs).
 func ValidateConfig(c Config) []string { return ValidateMap(toMap(c)) }
 
+// getNum reads a JSON number that may decode as float64 or (after
+// normalizeNumbers) int64 — mirrors JS typeof === "number" for both shapes.
+func getNum(m map[string]any, key string) (float64, bool) {
+	if m == nil {
+		return 0, false
+	}
+	switch v := m[key].(type) {
+	case float64:
+		return v, true
+	case int64:
+		return float64(v), true
+	case int:
+		return float64(v), true
+	}
+	return 0, false
+}
+
 // ValidateMap mirrors config.ts validateConfig — messages VERBATIM, same order.
 func ValidateMap(m map[string]any) []string {
 	var errors []string
@@ -224,19 +241,19 @@ func ValidateMap(m map[string]any) []string {
 	if model == "" {
 		push("jev.model is required")
 	}
-	timeoutMs, _ := jev["timeoutMs"].(float64)
+	timeoutMs, _ := getNum(jev, "timeoutMs")
 	if timeoutMs < 50 {
 		push("jev.timeoutMs must be >= 50")
 	}
-	minConfidence, _ := jev["minConfidence"].(float64)
+	minConfidence, _ := getNum(jev, "minConfidence")
 	if !(minConfidence > 0) || !(minConfidence < 1) {
 		push("jev.minConfidence must be between 0 and 1 exclusive")
 	}
-	trivialNoul, _ := jev["trivialNoul"].(float64)
+	trivialNoul, _ := getNum(jev, "trivialNoul")
 	if !(trivialNoul > 0) || !(trivialNoul < 1) {
 		push("jev.trivialNoul must be between 0 and 1 exclusive")
 	}
-	if fb, ok := jev["fallbackTier"].(float64); !ok || !isTierIdFloat(fb) {
+	if fb, ok := getNum(jev, "fallbackTier"); !ok || !isTierIdFloat(fb) {
 		push("jev.fallbackTier must be an integer 0..3")
 	}
 
@@ -250,7 +267,7 @@ func ValidateMap(m map[string]any) []string {
 		if t == nil {
 			t = map[string]any{}
 		}
-		id, idOK := t["id"].(float64)
+		id, idOK := getNum(t, "id")
 		if !idOK || !isTierIdFloat(id) {
 			push(fmt.Sprintf("tier id %s must be an integer 0..3", jsonString(t["id"])))
 			id = -1
@@ -270,20 +287,20 @@ func ValidateMap(m map[string]any) []string {
 				}
 				upstream, _ := mm["upstream"].(string)
 				if upstream != "ollama" && upstream != "openrouter" {
-					push(fmt.Sprintf("tier %s model %s: upstream must be \"ollama\" or \"openrouter\"", numForMsg(id, idOK), jsonString(mm["id"])))
+					push(fmt.Sprintf("tier %s model %s: upstream must be \"ollama\" or \"openrouter\"", numForMsg(id, idOK), plainID(mm["id"])))
 				}
 				mid, _ := mm["id"].(string)
 				if mid == "" {
 					push(fmt.Sprintf("tier %s model missing id", numForMsg(id, idOK)))
 				}
-				ctx, _ := mm["ctx"].(float64)
+				ctx, _ := getNum(mm, "ctx")
 				if !(ctx > 0) {
-					push(fmt.Sprintf("tier %s model %s: ctx must be > 0", numForMsg(id, idOK), jsonString(mm["id"])))
+					push(fmt.Sprintf("tier %s model %s: ctx must be > 0", numForMsg(id, idOK), plainID(mm["id"])))
 				}
-				in, inOK := mm["in"].(float64)
-				out, outOK := mm["out"].(float64)
+				in, inOK := getNum(mm, "in")
+				out, outOK := getNum(mm, "out")
 				if !inOK || in < 0 || !outOK || out < 0 {
-					push(fmt.Sprintf("tier %s model %s: rates must be >= 0", numForMsg(id, idOK), jsonString(mm["id"])))
+					push(fmt.Sprintf("tier %s model %s: rates must be >= 0", numForMsg(id, idOK), plainID(mm["id"])))
 				}
 			}
 		}
@@ -295,7 +312,7 @@ func ValidateMap(m map[string]any) []string {
 		if t == nil {
 			continue
 		}
-		if id, ok := t["id"].(float64); ok {
+		if id, ok := getNum(t, "id"); ok {
 			idsSet[id] = true
 		}
 	}
@@ -324,22 +341,28 @@ func ValidateMap(m map[string]any) []string {
 		if !types.IsKnownCategory(cat) {
 			push(fmt.Sprintf("policy override category %q is not a known category", cat))
 		}
-		if tier, ok := ov["tier"].(float64); !ok || !isTierIdFloat(tier) {
+		if tier, ok := getNum(ov, "tier"); !ok || !isTierIdFloat(tier) {
 			push(fmt.Sprintf("policy override for %s: tier must be 0..3", cat))
 		}
 	}
 
 	costAny, _ := m["cost"].(map[string]any)
-	perCap, _ := costAny["perRequestCapUsd"].(float64)
+	if costAny == nil {
+		costAny = map[string]any{}
+	}
+	perCap, _ := getNum(costAny, "perRequestCapUsd")
 	if !(perCap > 0) {
 		push("cost.perRequestCapUsd must be > 0")
 	}
 	evalAny, _ := m["eval"].(map[string]any)
-	routingCap, _ := evalAny["routingCapUsd"].(float64)
+	if evalAny == nil {
+		evalAny = map[string]any{}
+	}
+	routingCap, _ := getNum(evalAny, "routingCapUsd")
 	if !(routingCap > 0) {
 		push("eval.routingCapUsd must be > 0")
 	}
-	e2eCap, _ := evalAny["e2eCapUsd"].(float64)
+	e2eCap, _ := getNum(evalAny, "e2eCapUsd")
 	if !(e2eCap > 0) {
 		push("eval.e2eCapUsd > 0")
 	}
@@ -372,10 +395,12 @@ func isTierIdFloat(v float64) bool {
 	return v >= 0 && v <= 3 && v == math.Trunc(v)
 }
 
-// jsonString mirrors JSON.stringify for error messages (null, undefined→"undefined").
+// jsonString mirrors JSON.stringify for error messages:
+//   - undefined prints as "undefined" (only relevant via numForMsg/nil cases)
+//   - strings print JSON-quoted: JSON.stringify("x") === "\"x\""
 func jsonString(v any) string {
 	if v == nil {
-		return "undefined" // TS: undefined in template literal prints "undefined"
+		return "undefined"
 	}
 	if s, ok := v.(string); ok {
 		b, _ := json.Marshal(s)
@@ -388,9 +413,52 @@ func jsonString(v any) string {
 	return string(b)
 }
 
+// plainID mirrors TS template-literal interpolation of a model id (${m.id}) —
+// raw string, NO JSON quoting. Used for the `model <id>:` part of messages
+// (validateConfig uses m.id directly, JSON.stringify only on tier ids).
+func plainID(v any) string {
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return jsonString(v)
+}
+
+// rawTemplate mirrors TS template-literal `${v}` interpolation:
+// undefined → "undefined", strings print RAW (no quotes), numbers decimal.
+func rawTemplate(v any) string {
+	switch t := v.(type) {
+	case nil:
+		return "undefined"
+	case string:
+		return t
+	case bool:
+		if t {
+			return "true"
+		}
+		return "false"
+	case float64, int64, int:
+		return numOrJson(toFloat(v))
+	default:
+		return jsonString(v)
+	}
+}
+
+func toFloat(v any) float64 {
+	switch n := v.(type) {
+	case float64:
+		return n
+	case int64:
+		return float64(n)
+	case int:
+		return float64(n)
+	}
+	return 0
+}
+
 func numForMsg(id float64, ok bool) string {
 	if !ok {
-		return jsonString(id)
+		// TS prints whatever t.id was via ${t.id} — raw semantics.
+		return rawTemplate(id)
 	}
 	return numOrJson(id)
 }
