@@ -133,7 +133,7 @@ func runTrace(args []string) int {
 		modelName = tierObj.Models[0].ID
 	}
 	fmt.Println("STEP 1 — Jev classification")
-	fmt.Printf("  category = %s   complexity = %v   is_trivial = %v\n", out.Category, out.Complexity, out.Confidence)
+	fmt.Printf("  category = %s   complexity = %v   is_trivial = %v\n", out.Category, out.Complexity, cls.TrivialNoul)
 	fmt.Println("STEP 2 — Context gate")
 	fmt.Println("STEP 3 — Policy rules, in order")
 	for _, n := range out.Notes {

@@ -1,8 +1,13 @@
-# TESTING.md — FluxRouter hands-on testing guide
+# TESTING.md — FluxRouter (Go engine) hands-on testing guide
 
-_A personal walkthrough for testing FluxRouter from scratch. Follow top-to-bottom on a
-fresh machine; every step tells you what you should see. Estimated time: ~30 min._
-_Last verified against: v0.1.0, Node 24, Windows._
+_A personal walkthrough for testing the Go FluxRouter from scratch. Follow top-to-bottom
+on a fresh machine; every step tells you what you should see. Estimated time: ~25 min._
+_Last verified against: v0.1.0-go (gorewrite branch), Go 1.27.1, Windows._
+
+> The Go engine is the v0.3 port of the original TypeScript engine. Its routing decisions
+> are proven identical to the TS engine by the golden-fixture parity gate (§1); the frozen
+> TS reference lives in `old/` and is only used to regenerate fixtures. Everything in this
+> guide runs the **Go binary**.
 
 ---
 
@@ -10,11 +15,14 @@ _Last verified against: v0.1.0, Node 24, Windows._
 
 | Need | Check | Where to get it if missing |
 |---|---|---|
-| Node 24+ | `node --version` → v24.x | nodejs.org |
+| Go 1.27+ | `go version` → go1.27.x | go.dev/dl |
 | Ollama account + key | `$env:OLLAMA_API_KEY` set | ollama.com → Settings → API keys |
 | TypeSafe (Jev) key | `$env:TYPESAFE_API_KEY` set | docs.typesafe.ai |
 | OpenRouter key (optional) | `$env:OPENROUTER_API_KEY` set | openrouter.ai → Keys |
 | OpenChamber (for the final AC, optional at first) | running locally | openchamber docs |
+
+No Node.js is required to run or test the router. (Node is only needed if you want to
+*regenerate* the golden fixtures yourself — see §1.)
 
 Set keys for this session — either shell exports:
 
@@ -32,52 +40,75 @@ notepad .env     # fill in the three values
 ```
 
 Precedence: real environment variables win over `.env.local`, which wins over `.env`.
-Both the server and `flux eval` read these files automatically.
+The server loads these automatically at boot.
 
-> Cost note: unit tests spend $0. Stage-1 eval ≈ $0.36. Stage-2 eval ≤ $10 (guarded).
-> A full acceptance run ~$2–3 drawn from your Ollama credits + pennies of Jev.
+> Cost note: everything in §1 spends $0 (offline). A live routing smoke (§3–§6) costs
+> pennies of Jev (~$0.001/decision) + nano-tier generation. A full acceptance run is
+> ~$1–2 drawn from your Ollama credits.
 
 ---
 
-## 1. Install & static checks (spends $0)
+## 1. Static checks & the parity gate (spends $0)
+
+Build the binary:
 
 ```powershell
 cd C:\code\FluxRouter
-npm install
+go build -o fluxrouter.exe ./cmd/fluxrouter
 ```
 
-Check 1 — dependencies install clean (8 packages, 0 vulnerabilities).
+**Check 1** — clean build, no output. Then:
 
 ```powershell
-npm test
+go test ./... -count=1
 ```
 
-Check 2 — **41/41 unit tests pass.** These cover the whole policy engine:
-trivial bypass, complexity bands, low-confidence escalation, context gate,
-cost-guard downgrade, sticky pin/reuse/upward-escape, config validation, Jev response
-parsing, env loading.
+**Check 2 — all tests pass** (`internal/...` + `test/e2e`). The suite covers:
+the full routing policy (trivial bypass, complexity bands, low-confidence escalation,
+context gate, cost-guard downgrade, sticky pin/reuse/upward-escape), config validation,
+session-id hashing, Jev state building and response parsing, JS UTF-16 string semantics,
+SQLite route-card round-trip, HTTP contract (auth, error shapes, `/v1/models`,
+`/metrics` formats, SSE pass-through), and a binary-level e2e that boots the real
+server against stub upstreams. Use `go test ./... -short` to skip the e2e boot.
+
+### The parity gate — the port's proof
 
 ```powershell
-npm run typecheck
+./fluxrouter.exe parity fixtures/golden.jsonl
 ```
 
-Check 3 — TypeScript is clean (`tsc --noEmit`, empty output = good).
+**Check 3 — `parity: 1272/1272 fixtures match (100.0%)`, exit code 0.**
+
+This is the acceptance oracle for the Go rewrite: 1,272 routing decisions recorded
+from the live TS engine (a sweep of complexity × category × triviality × confidence,
+plus sticky pins, Jev-fallback tiers, and context-gate shrinks). The Go engine must
+reproduce every decision — same tier, same reason code, cost within 1e-9. Exit 1 with
+a per-decision diff means a routing behavior changed; **one divergence is a bug, not a
+tuning opinion** — unless you are *deliberately* retuning bands, in which case you
+regenerate the fixtures in the same commit (see below) so reviewers see exactly which
+decisions moved.
+
+To regenerate (intentional policy changes only; needs Node):
 
 ```powershell
-node cli/flux.ts config validate
+node old/scripts/gen-fixtures.mjs   # re-records from the TS reference engine
+./fluxrouter.exe parity fixtures/golden.jsonl   # must be 100% again before commit
 ```
 
-Check 4 — prints ✓ valid + the 4 tiers with rates:
+Then config sanity:
+
+```powershell
+./fluxrouter.exe config validate
+```
+
+**Check 4 — prints `Config OK. Tiers:` + the 4 tiers with rates:**
 
 ```
-✓ fluxrouter.config.json valid
-  jev: jev-1.13.0 @ https://api.typesafe.ai/v1/systemone (timeout 700ms)
-  tier 0 nano     → ollama:nemotron-3-nano:30b ($0.06/$0.24 per M in/out, ctx 1000000)
-  tier 1 flash    → ollama:glm-5.3-flash   ($0.15/$0.5 …)
-  tier 2 mid      → ollama:deepseek-v4-pro:0813 ($0.66/$1.98 …)
-  tier 3 frontier → ollama:kimi-k3        ($3.00/$15.00 …)
-  cost cap/request: $0.25
-  eval caps: routing $1, e2e $10
+Config OK. Tiers:
+  tier 0 nano: nemotron-3-nano:30b ($0.06/$0.24 per M, ctx 1000000)
+  tier 1 flash: glm-5.3-flash ($0.15/$0.5 per M, ctx 1000000)
+  tier 2 mid: deepseek-v4-pro:0813 ($0.66/$1.98 per M, ctx 1000000)
+  tier 3 frontier: kimi-k3 ($3/$15 per M, ctx 1000000)
 ```
 
 Try to break it: edit `fluxrouter.config.json`, set `"perRequestCapUsd": -1`, re-run
@@ -88,7 +119,7 @@ validate → expect exit code 2 and a readable error. Then undo it.
 ## 2. Start the server (spends $0)
 
 ```powershell
-npm start
+./fluxrouter.exe serve
 ```
 
 Expect:
@@ -100,15 +131,15 @@ FluxRouter v0.1.0 listening on http://127.0.0.1:8787
   route cards: .fluxrouter/route-cards.{jsonl,db}
 ```
 
-(If you see `EADDRINUSE`, another instance is already on 8787 — stop it or use
-`npm start -- --port 8788`.)
+(If the port is taken, another instance is already on 8787 — stop it or use
+`./fluxrouter.exe serve --port 8788`.)
 
 Leave it running. New terminal for the rest. Verify the surface:
 
 ```powershell
 curl.exe http://127.0.0.1:8787/health
 curl.exe http://127.0.0.1:8787/v1/models
-curl.exe http://127.0.0.1:8788/metrics   # after a few requests
+curl.exe http://127.0.0.1:8787/metrics   # after a few requests
 ```
 
 **Check 5** — health `{"ok":true}`, models lists `flux`, metrics exposes counters.
@@ -135,10 +166,10 @@ X-Flux-Route-Reason: trivial_bypass
 X-Flux-Session: <hash>
 ```
 
-Or without spending anything:
+Or drive the exact same policy engine offline, spending nothing:
 
 ```powershell
-node cli/flux.ts trace "hello"
+./fluxrouter.exe trace "hello" --offline --category greeting_chitchat --complexity 0.2 --noul 0.9
 ```
 
 Hard math must go UP a tier (change content):
@@ -168,11 +199,11 @@ measures and what your `complexityToTier` bands should be tuned against.
 ## 4. Route cards & report (spends $0)
 
 ```powershell
-node cli/flux.ts report --by tier
-node cli/flux.ts report --by category --today
+./fluxrouter.exe report --by tier
+./fluxrouter.exe report --by category
 ```
 
-**Check 9** — tier 0 shows your "hello"; math shows under `math`; a `cost $` column
+**Check 9** — tier 0 shows your "hello"; math shows under `math`; a `cost_usd` column
 with actual (tiny) numbers; totals reconcile with:
 
 ```powershell
@@ -181,6 +212,13 @@ with actual (tiny) numbers; totals reconcile with:
 
 (line count == sum of requests in report). Open one JSONL line and eyeball:
 `reason` matches the header you saw, `costUsd` is ~1e-5-ish, `latenciesMs.jev` < 700.
+The report also prints the **all-frontier counterfactual** — what the same traffic
+would have cost at tier-3 rates — e.g. `21 requests, $0.0069 actual vs $0.2193
+all-frontier (96.8% cheaper)`.
+
+The SQLite store (`.fluxrouter/route-cards.db`) is schema-identical to the one the TS
+engine wrote, so cards written by the old engine remain queryable, and vice versa
+(covered by `internal/telemetry` cross-read tests; verified live in §1's test run).
 
 ---
 
@@ -215,18 +253,32 @@ Kill network to Jev only (or set a bogus `jev.baseUrl` in config) and send "hell
 **Check 12** — request still succeeds; reason `jev_timeout_fallback` or
 `jev_unavailable_fallback`; response completes — no user-visible error. Restore config.
 
-Cost-guard check without spending: temporarily set tier-3 rates to 75/75 in config and
-send a 1MB-content request with a tool_planning category — route card must show
-`reason: cost_guard` and a lower tier. (Covered by unit test "cost guard downgrades…" —
-run `npm test` if you don't want to hand-configure.)
+Cost-guard check without spending:
+
+```powershell
+./fluxrouter.exe trace "big request" --offline --category tool_planning --complexity 0.3 --noul 0.1
+```
+
+then temporarily raise tier-3 rates in config and re-check — but the no-config path is
+the unit-test version: "cost guard downgrades when projected cost exceeds cap" is
+covered by a recorded golden vector in `go test ./internal/routing/`. (Route cards must
+show `reason: cost_guard` and a lower tier when it fires live.)
 
 ---
 
 ## 7. Eval harness (Check 13 — the AC6 budget contracts)
 
+> **Status: TS-only for now.** The eval runners (`eval routing` / `eval e2e`) live in the
+> frozen TS tree and are ported in a later v0.3 stage (see ROADMAP). Until then run them
+> from `old/` with Node — they exercise the same Jev API, the same config file, and the
+> same route-card format; the numbers they produce remain valid for the Go engine's
+> band tuning because routing policy is parity-locked (§1).
+
 Dry-run first (costs nothing):
 
 ```powershell
+cd old
+npm install
 node cli/flux.ts eval routing --dry-run
 ```
 
@@ -238,9 +290,9 @@ routing eval: 362 prompts × $0.001 = $0.36 (cap $1)
 dry-run: stopping before any calls.
 ```
 
-Datasets download once and cache under `cli/eval/datasets-files/` (gitignored), so later
-runs are offline and free. If a dataset source moves, the run warns and continues with
-the rest instead of crashing.
+Datasets download once and cache under `old/cli/eval/datasets-files/` (gitignored), so
+later runs are offline and free. If a dataset source moves, the run warns and continues
+with the rest instead of crashing.
 
 Real run (≈ $0.36, cap $1):
 
@@ -270,13 +322,16 @@ Contract gates: trivial row **exact = 100%**, total ±1 tier ≥ 85%. Targeted r
 `--only trivial` ($0.05), `--only math500,swebench_lite` ($0.20).
 
 Budget guard proof: temporarily set `"routingCapUsd": 0.01` in config, re-run →
-expect `✗ budget guard… Nothing was spent.` and exit 2. Restore to 1.
+expect the guard refusal message and exit 2. Restore to 1.
 
 ---
 
 ## 8. End-to-end quality + cost (spends ≤ $10; check spend first!)
 
+> **TS-only for now** (same note as §7).
+
 ```powershell
+cd old
 node cli/flux.ts eval e2e --dry-run
 ```
 
@@ -299,7 +354,7 @@ tier→model mapping: target ≥ 90% of the all-frontier baseline.
    - Base URL `http://127.0.0.1:8787/v1`, key: anything, model: `flux`
 2. Make it the active model in a chat.
 3. Run three turns:
-   - a greeting → check `flux report --today` shows tier 0
+   - a greeting → check `./fluxrouter.exe report --by tier` shows tier 0
    - "Write a debounce function in TypeScript with leading-edge option." → tier ≥ 1, streamed
    - a hard math/probability question → tier 2, correct answer
 4. **Check 15** — all three turns completed in OpenChamber UI; route cards exist for
@@ -312,6 +367,7 @@ tier→model mapping: target ≥ 90% of the all-frontier baseline.
 
 | # | Criterion | Where verified |
 |---|---|---|
+| AC0 | Go engine routes identically to the TS engine | §1 parity gate |
 | AC1 | OpenChamber chat works end-to-end (greeting/math/streamed code) | §9 |
 | AC2 | "hello" → tier 0, ~$0.000x | §3 |
 | AC3 | Hard math → tier ≥ 1–2, complexity recorded | §3 |
@@ -320,7 +376,7 @@ tier→model mapping: target ≥ 90% of the all-frontier baseline.
 | AC6 | routing eval ≤ $1; e2e ≤ $10; guard enforced | §7 |
 | AC7 | `flux report` reconciles exactly with JSONL | §4 |
 
-All green → v0.1 acceptance done.
+All green → Go-engine acceptance done.
 
 ---
 
@@ -333,9 +389,11 @@ All green → v0.1 acceptance done.
 | Jev 401 | wrong/expired `TYPESAFE_API_KEY` |
 | Ollama 402/403 | credits exhausted on your plan; check ollama.com → usage |
 | OpenRouter 429 on eval | `:free` daily cap; use paid variants for e2e |
-| `config errors` at boot | run `node cli/flux.ts config validate`, fix listed fields |
+| `FluxRouter config errors` at boot | run `./fluxrouter.exe config validate`, fix listed fields |
+| Parity divergences after a policy edit | intentional? regenerate fixtures (`node old/scripts/gen-fixtures.mjs`) **and commit them together** with the band change; accidental? revert and investigate |
 | Every request tier 1 | Jev failing or scoring mid — look for `jev_unavailable_fallback` in cards; check key |
-| Hard math lands on tier 1 | Expected until calibrated — Jev scores most word problems ~0.9–1.0. Tune `complexityToTier` bands using `flux eval routing` results |
+| Hard math lands on tier 1 | Expected until calibrated — Jev scores most word problems ~0.9–1.0. Tune `complexityToTier` bands using eval results (§7) |
 | Trivial contract failing | check `jev.trivialNoul` (0.85) and `escalateOnlyAboveComplexity` (0.5) are set |
 | PowerShell curl errors | use `curl.exe`, not the `Invoke-WebRequest` alias |
-| `EADDRINUSE :8787` | another instance is running; stop it or `--port 8788` |
+| Port 8787 already in use | another instance is running; stop it or `--port 8788` |
+| `go test` fails on `test/e2e` alone | e2e needs to build the binary; run from repo root (`go test ./...`), or skip with `-short` |
