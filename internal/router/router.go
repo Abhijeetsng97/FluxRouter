@@ -3,12 +3,12 @@
 package router
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
-	"strconv"
 	"time"
 
 	"github.com/abhijeet/fluxrouter/internal/cardlog"
@@ -28,6 +28,10 @@ type ChatRequest struct {
 	Stream   bool
 	Model    string
 	ModelSet bool
+
+	// messagesNotArray marks "messages present but not an array" so
+	// ParseChatRequest can return nil exactly like TS Array.isArray check.
+	messagesNotArray bool
 }
 
 // ChatMessage is the normalized message shape.
@@ -40,52 +44,84 @@ type ChatMessage struct {
 //   role: String(m.role ?? "user") — any non-null role stringified, null/undefined → "user"
 //   content: typeof === "string" ? content : JSON.stringify(content ?? "")
 //     → null/undefined content becomes the 2-char string `""`; numbers,
-//       arrays, objects become their JSON text. (Multimodal content arrays
-//       are deliberately flattened this way by the TS engine.)
-func ParseChatRequest(body any) *ChatRequest {
-	bm, ok := body.(map[string]any)
+//       arrays, objects become their JSON text WITH SOURCE KEY ORDER
+//       preserved (TS JSON.parse keeps insertion order; Go maps sort keys —
+//       the ordered re-stringify in json_order.go prevents excerpt/hash
+//       divergence).
+func ParseChatRequest(rawBody []byte) *ChatRequest {
+	reader := newOrderedReader(rawBody)
+	top, err := reader.readValue()
+	if err != nil {
+		return nil
+	}
+	bm, ok := top.([]orderedPair)
 	if !ok {
 		return nil
 	}
-	rawMessages, ok := bm["messages"].([]any)
-	if !ok {
-		return nil
+	var rawMessages []any
+	req := &ChatRequest{}
+	for _, p := range bm {
+		switch p.Key {
+		case "stream":
+			req.Stream = p.Value == true
+		case "model":
+			if s, ok := p.Value.(string); ok {
+				req.Model = s
+				req.ModelSet = true
+			}
+		case "messages":
+			if arr, ok := p.Value.([]any); ok {
+				rawMessages = arr
+			} else {
+				rawMessages = []any{} // marker: present but not array
+				req.messagesNotArray = true
+			}
+		}
 	}
-	req := &ChatRequest{Stream: bm["stream"] == true}
-	if m, ok := bm["model"].(string); ok {
-		req.Model = m
-		req.ModelSet = true
+	if req.messagesNotArray || rawMessages == nil {
+		return nil // TS: !body || !Array.isArray(body.messages) => null
 	}
 	for _, rm := range rawMessages {
-		m, _ := rm.(map[string]any)
-		if m == nil {
-			m = map[string]any{}
+		pairs, _ := rm.([]orderedPair)
+		msg := ChatMessage{Role: "user"}
+		contentSeen := false
+		for _, p := range pairs {
+			switch p.Key {
+			case "role":
+				switch r := p.Value.(type) {
+				case string:
+					msg.Role = r
+				case nil:
+					msg.Role = "user" // String(undefined ?? "user")
+				default:
+					msg.Role = jsToStringValue(r)
+				}
+			case "content":
+				contentSeen = true
+				if s, ok := p.Value.(string); ok {
+					msg.Content = s
+				} else if p.Value == nil {
+					msg.Content = `""` // JSON.stringify(null ?? "") === '""'
+				} else {
+					var buf bytes.Buffer
+					if err := encodeOrdered(&buf, p.Value); err == nil {
+						msg.Content = buf.String()
+					} else {
+						msg.Content = `""`
+					}
+				}
+			}
 		}
-		role := "user"
-		switch r := m["role"].(type) {
-		case string:
-			role = r
-		case nil:
-			role = "user" // String(undefined ?? "user")
-		default:
-			role = jsToString(r)
+		if !contentSeen {
+			msg.Content = `""` // JSON.stringify(undefined ?? "") === '""'
 		}
-		var content string
-		if c, ok := m["content"].(string); ok {
-			content = c
-		} else {
-			content = jsJSONString(m["content"])
-		}
-		req.Messages = append(req.Messages, ChatMessage{Role: role, Content: content})
-	}
-	if req.Messages == nil {
-		req.Messages = []ChatMessage{}
+		req.Messages = append(req.Messages, msg)
 	}
 	return req
 }
 
-// jsToString mirrors TS String(v) for the shapes that can arrive in JSON.
-func jsToString(v any) string {
+// jsToStringValue mirrors TS String(v) for JSON-decoded values.
+func jsToStringValue(v any) string {
 	switch t := v.(type) {
 	case string:
 		return t
@@ -94,30 +130,18 @@ func jsToString(v any) string {
 			return "true"
 		}
 		return "false"
-	case float64:
-		return strconv.FormatFloat(t, 'g', -1, 64)
-	case int64:
-		return strconv.FormatInt(t, 10)
+	case json.Number:
+		return t.String()
 	case nil:
 		return "null"
 	default:
+		var buf bytes.Buffer
+		if err := encodeOrdered(&buf, t); err == nil {
+			return buf.String()
+		}
 		b, _ := json.Marshal(t)
 		return string(b)
 	}
-}
-
-// jsJSONString mirrors JSON.stringify(v ?? "") for non-string content:
-// null/undefined → `""` (the JSON of the empty string), numbers/arrays/
-// objects → their JSON text, undefined-valued keys omitted by marshal.
-func jsJSONString(v any) string {
-	if v == nil {
-		return `""`
-	}
-	b, err := json.Marshal(v)
-	if err != nil {
-		return `""`
-	}
-	return string(b)
 }
 
 // jevMessage converts to the jev package shape.
@@ -316,8 +340,10 @@ type RouteDecisionResult struct {
 }
 
 // Execute mirrors router.ts execute: route, forward with failover, stream
-// back, write the route card.
-func (s *Service) Execute(ctx context.Context, rawBody map[string]any, req *ChatRequest, requestedModel string, startTs time.Time) (*ExecuteResult, error) {
+// back, write the route card. rawBodyJSON is the ORIGINAL request bytes —
+// the forwarded body must be a re-stringification with the model patched
+// (TS `{...rawBody, model: id}` keeps the original key position).
+func (s *Service) Execute(ctx context.Context, rawBodyJSON []byte, req *ChatRequest, requestedModel string, startTs time.Time) (*ExecuteResult, error) {
 	cfg := s.deps.Config
 	sessionID := session.SessionIDFor(sessionMessages(req.Messages))
 	decision, err := s.Decide(ctx, req)
@@ -333,7 +359,7 @@ func (s *Service) Execute(ctx context.Context, rawBody map[string]any, req *Chat
 		return nil, fmt.Errorf("tier %d vanished", decision.Tier)
 	}
 	startedUpstream := time.Now()
-	attempt := s.forwardWithFailover(ctx, tier, req, rawBody)
+	attempt := s.forwardWithFailover(ctx, tier, req, rawBodyJSON)
 	upstreamMs := time.Since(startedUpstream).Milliseconds()
 	totalMs := upstreamMs
 	if !startTs.IsZero() {
@@ -390,11 +416,11 @@ type ExecuteResult struct {
 
 // ForwardWithFailover mirrors router.ts forwardWithFailover (exported for the
 // parity harness): primary tier models in order → next-tier-up models.
-func (s *Service) ForwardWithFailover(ctx context.Context, tier *types.Tier, req *ChatRequest, rawBody map[string]any) *upstream.Result {
-	return s.forwardWithFailover(ctx, tier, req, rawBody)
+func (s *Service) ForwardWithFailover(ctx context.Context, tier *types.Tier, req *ChatRequest, rawBodyJSON []byte) *upstream.Result {
+	return s.forwardWithFailover(ctx, tier, req, rawBodyJSON)
 }
 
-func (s *Service) forwardWithFailover(ctx context.Context, tier *types.Tier, req *ChatRequest, rawBody map[string]any) *upstream.Result {
+func (s *Service) forwardWithFailover(ctx context.Context, tier *types.Tier, req *ChatRequest, rawBodyJSON []byte) *upstream.Result {
 	cfg := s.deps.Config
 	type attempt struct {
 		model types.TierModel
@@ -432,13 +458,12 @@ func (s *Service) forwardWithFailover(ctx context.Context, tier *types.Tier, req
 		if key == "" {
 			continue
 		}
-		body := map[string]any{}
-		for k, v := range rawBody {
-			body[k] = v
-		}
-		body["model"] = a.model.ID
+		// TS: { ...rawBody, model: id } — the model key KEEPS ITS ORIGINAL
+		// POSITION if present, else lands at the end. Re-stringify ordered
+		// and patch in place.
+		forwarded := patchModelInBody(rawBodyJSON, a.model.ID)
 		res, err := s.deps.Upstreams.Forward(ctx, ep, string(a.model.Upstream), "/chat/completions", upstream.ForwardOptions{
-			Body:   body,
+			Body:   forwarded,
 			Stream: req.Stream,
 		})
 		if err != nil {

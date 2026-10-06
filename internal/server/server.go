@@ -114,19 +114,25 @@ func (h *Handler) handleChat(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, errorBody("Invalid JSON body", "fluxrouter_bad_request"))
 		return
 	}
-	var body map[string]any
-	// TS c.req.json() would throw on empty body too — both map to 400.
-	if err := json.Unmarshal(raw, &body); err != nil {
+	// TS c.req.json() throws on non-object JSON too (e.g. `[1,2]` parses but
+	// body.messages access differs) — mirror by validating it parses as a
+	// JSON object.
+	var probe any
+	if err := json.Unmarshal(raw, &probe); err != nil {
 		writeJSON(w, 400, errorBody("Invalid JSON body", "fluxrouter_bad_request"))
 		return
 	}
-	req := router.ParseChatRequest(body)
+	if _, ok := probe.(map[string]any); !ok {
+		writeJSON(w, 400, errorBody("messages[] is required", "fluxrouter_bad_request"))
+		return
+	}
+	req := router.ParseChatRequest(raw)
 	if req == nil {
 		writeJSON(w, 400, errorBody("messages[] is required", "fluxrouter_bad_request"))
 		return
 	}
 
-	exec, err := h.Service.Execute(r.Context(), body, req, req.Model, startTs)
+	exec, err := h.Service.Execute(r.Context(), raw, req, req.Model, startTs)
 	if err != nil {
 		h.Metrics.Inc("server_errors_total", 1)
 		writeJSON(w, 500, errorBody(err.Error(), "fluxrouter_internal"))
@@ -336,5 +342,13 @@ func tryFindConfig() string {
 }
 
 func missingKeys(cfg config.Config) []string {
-	return []string{cfg.Upstreams.Ollama.ApiKeyEnv, "TYPESAFE_API_KEY"}
+	// TS: requiredKeys(config).filter((k) => !process.env[k])
+	required := []string{cfg.Upstreams.Ollama.ApiKeyEnv, "TYPESAFE_API_KEY"}
+	var missing []string
+	for _, k := range required {
+		if os.Getenv(k) == "" {
+			missing = append(missing, k)
+		}
+	}
+	return missing
 }
