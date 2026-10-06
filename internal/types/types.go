@@ -51,17 +51,30 @@ type Tier struct {
 type RouteReason string
 
 const (
-	ReasonTrivialBypass         RouteReason = "trivial_bypass"
-	ReasonPolicy                RouteReason = "policy"
-	ReasonLowConfidenceEsc      RouteReason = "low_confidence_escalation"
-	ReasonSticky                RouteReason = "sticky"
-	ReasonStickyEscapeUp        RouteReason = "sticky_escape_up"
-	ReasonCostGuard             RouteReason = "cost_guard"
-	ReasonContextGate           RouteReason = "context_gate"
-	ReasonJevTimeoutFallback    RouteReason = "jev_timeout_fallback"
+	ReasonTrivialBypass          RouteReason = "trivial_bypass"
+	ReasonPolicy                 RouteReason = "policy"
+	ReasonLowConfidenceEsc       RouteReason = "low_confidence_escalation"
+	ReasonSticky                 RouteReason = "sticky"
+	ReasonStickyEscapeUp         RouteReason = "sticky_escape_up"
+	ReasonCostGuard              RouteReason = "cost_guard"
+	ReasonContextGate            RouteReason = "context_gate"
+	ReasonJevTimeoutFallback     RouteReason = "jev_timeout_fallback"
 	ReasonJevUnavailableFallback RouteReason = "jev_unavailable_fallback"
-	ReasonUpstreamExhausted     RouteReason = "upstream_exhausted"
+	ReasonUpstreamExhausted      RouteReason = "upstream_exhausted"
 )
+
+// RouteDecision mirrors types.ts RouteDecision (the pre-execution decision).
+type RouteDecision struct {
+	Tier             TierId       `json:"tier"`
+	Model            string       `json:"model"`
+	Upstream         UpstreamName `json:"upstream"`
+	Reason           RouteReason  `json:"reason"`
+	Category         string       `json:"category"`
+	Complexity       float64      `json:"complexity"`
+	Confidence       float64      `json:"confidence"`
+	ProjectedCostUsd float64      `json:"projectedCostUsd"`
+	JevLatencyMs     *int64       `json:"jevLatencyMs,omitempty"`
+}
 
 // Usage mirrors RouteCard.usage.
 type Usage struct {

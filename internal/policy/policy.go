@@ -6,6 +6,7 @@
 package policy
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 
@@ -14,9 +15,41 @@ import (
 )
 
 // Band mirrors TS `Array<[number, TierId]>` entries: complexity < Threshold → Tier.
+// In JSON the TS shape is an array PAIR: [0.8, 0]. Unmarshal accepts both the
+// pair form and the object form {"threshold":0.8,"tier":0}.
 type Band struct {
 	Threshold float64
 	Tier      types.TierId
+}
+
+// UnmarshalJSON accepts [threshold, tier] pairs (the TS wire shape) and
+// objects.
+func (b *Band) UnmarshalJSON(data []byte) error {
+	var pair []any
+	if err := json.Unmarshal(data, &pair); err == nil && len(pair) == 2 {
+		if th, ok := pair[0].(float64); ok {
+			if ti, ok := pair[1].(float64); ok {
+				b.Threshold = th
+				b.Tier = types.TierId(ti)
+				return nil
+			}
+		}
+		return fmt.Errorf("complexityToTier pair must be [number, tier]")
+	}
+	var obj struct {
+		Threshold float64      `json:"threshold"`
+		Tier      types.TierId `json:"tier"`
+	}
+	if err := json.Unmarshal(data, &obj); err != nil {
+		return err
+	}
+	*b = Band{Threshold: obj.Threshold, Tier: obj.Tier}
+	return nil
+}
+
+// MarshalJSON writes the TS pair form.
+func (b Band) MarshalJSON() ([]byte, error) {
+	return json.Marshal([]float64{b.Threshold, float64(b.Tier)})
 }
 
 // Override mirrors TS `{ category, minComplexity?, tier }`.
