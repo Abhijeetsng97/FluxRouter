@@ -97,9 +97,7 @@ recorded and the v0.3 contract written down.
 **Theme: the best router is the one you can install in one command. The rewrite ships
 only after it proves it routes identically to the engine that earned the trust.**
 
-The decision and its evidence live in **[docs/LANGUAGE_ANALYSIS.md](docs/LANGUAGE_ANALYSIS.md)**
-(codebase audit + external research: LiteLLM's Python→Rust migration, Preto's Go-vs-Rust
-decision, Bifrost, TensorZero, Node-vs-Go SSE data). Summary of the call:
+The decision (codebase audit + external research: LiteLLM's Python→Rust migration, Preto's Go-vs-Rust decision, Bifrost, TensorZero, Node-vs-Go SSE data). Summary:
 
 - **Why rewrite at all:** the proxy's own overhead is noise (<2% of a request dominated
   by Jev + a 500–5,000ms LLM), but *distribution* is FluxRouter's #1 adoption blocker —
@@ -219,5 +217,4 @@ far easier):
   and its audit trail.
 - Rewriting again for performance's sake. The router's overhead is already noise behind
   the LLM; v0.3 is the last planned language move. (Rust re-enters the conversation only
-  if the routing core becomes an embeddable library — see
-  [docs/LANGUAGE_ANALYSIS.md](docs/LANGUAGE_ANALYSIS.md).)
+  if the routing core becomes an embeddable library.)

@@ -330,7 +330,7 @@ internal/        the Go engine: routing (cost+policy+session), jev, config,
 old/             frozen TypeScript engine (v0.1) — fixture generator + eval suite
 fixtures/        golden.jsonl — 1,272 recorded TS-engine decisions (parity oracle)
 schema/          JSON schema for fluxrouter.config.json
-docs/            HOW_IT_DECIDES.md, EVALS.md, LANGUAGE_ANALYSIS.md
+docs/            HOW_IT_DECIDES.md, EVALS.md
 test/e2e/        binary-level end-to-end test (go test ./test/e2e)
 ```
 
@@ -349,7 +349,7 @@ Eval output explained, with the raw runs: **[docs/EVALS.md](docs/EVALS.md)**.
   a frozen compatibility contract.
 - **v0.3** — the Go rewrite: single ~15MB static binary, parity-proven against the TS
   engine via golden fixtures + a week of live shadow dual-run, then published as release
-  assets for all platforms. See [docs/LANGUAGE_ANALYSIS.md](docs/LANGUAGE_ANALYSIS.md).
+  assets for all platforms.
 - **v0.4** — context economics: compaction, trimming stale tool output, and reducing the
   skills / tool schemas injected per prompt based on the classified task; prompt-cache-aware
   routing.

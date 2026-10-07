@@ -26,7 +26,6 @@ The Go rewrite: the engine ported route-by-route behind a parity harness (golden
 fixtures from v0.2, then a week of live shadow dual-run), shipped as a single static
 binary for all platforms. Config, route-card schema, headers, and CLI stay identical —
 the only visible change is how it installs. See
-[ROADMAP.md](ROADMAP.md) and [docs/LANGUAGE_ANALYSIS.md](docs/LANGUAGE_ANALYSIS.md).
 
 ### Planned — v0.4
 Context economics: compaction, trimming stale tool output, and Jev-driven reduction of
