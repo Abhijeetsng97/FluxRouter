@@ -31,7 +31,7 @@ traffic before it ships.
 
 **Known gaps carried forward:** tier 3 (frontier) almost never fires; ~7% under-routing
 on terse code-debug prompts; Stage-2 answer quality not yet measured; not yet run inside
-a real agent harness for a sustained period; install requires Node 24+ (fixes in v0.3).
+a real agent harness for a sustained period; install required Node 24+ (fixed by the v0.3 Go port — one static binary).
 
 ## v0.2 — calibration, routing logic, and real-harness validation (next)
 
@@ -103,7 +103,8 @@ decision, Bifrost, TensorZero, Node-vs-Go SSE data). Summary of the call:
 
 - **Why rewrite at all:** the proxy's own overhead is noise (<2% of a request dominated
   by Jev + a 500–5,000ms LLM), but *distribution* is FluxRouter's #1 adoption blocker —
-  Node 24 + `git clone` + `npm install` vs one ~15MB static binary. A rewrite buys
+  the old install was Node 24 + `git clone` + `npm install`; the Go port is
+  `go build ./cmd/fluxrouter` → one ~15MB static binary. A rewrite buys
   installability and footprint (~150MB RSS → tens of MB, ~1s start → milliseconds), not
   meaningful latency.
 - **Why Go, not Rust:** the product is a *policy* that must iterate weekly with measured

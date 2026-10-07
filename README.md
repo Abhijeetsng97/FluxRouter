@@ -2,8 +2,9 @@
 
 **A Jev-classified, tier-based OpenAI-compatible LLM router with a full audit trail.**
 
-> **Status: v0.1 — foundation.** Installable from source (`git clone` + `npm install`);
-> not yet published to npm. Roadmap: [v0.2 = calibrated routing + real-harness validation,
+> **Status: v0.1 — foundation, Go engine (v0.3 port in progress).** Build from
+> source with Go 1.27+ (`go build ./cmd/fluxrouter` — one static binary, no
+> runtime dependencies). Roadmap: [v0.2 = calibrated routing + real-harness validation,
 > v0.3 = the Go rewrite (single binary, proven by its own audit trail),
 > v0.4 = context economics](ROADMAP.md).
 
@@ -45,14 +46,14 @@ expose an auditable decision. FluxRouter's differentiators:
 - **Context gate + per-request cost cap** — a 300k-token request can never silently hit
   a long-context $75/M-output model; the guard downgrades and logs why.
 - **Route cards** — every request logs category, complexity, confidence, chosen tier,
-  reason code, actual cost, and latencies (JSONL + SQLite). `flux report` reconciles
+  reason code, actual cost, and latencies (JSONL + SQLite). `fluxrouter report` reconciles
   actual spend vs an all-frontier counterfactual so savings are *measured*, not claimed.
-- **Budget-guarded evals** — `flux eval routing` measures routing accuracy for ~$0.50;
+- **Budget-guarded evals** — `eval routing` (TS suite in `old/`) measures routing accuracy for ~$0.50;
   a pre-flight guard refuses to spend above your configured cap ($1 routing / $10 e2e).
 
 ## Requirements
 
-- **Node 24+** (runs TypeScript directly; no build step)
+- **Go 1.27+** (builds one static binary; no Node.js/runtime dependencies)
 - **API keys in env:**
   - `OLLAMA_API_KEY` — **required** — [ollama.com](https://ollama.com) (Pro/Max plan credits)
   - `TYPESAFE_API_KEY` — **required** — [TypeSafe](https://docs.typesafe.ai) (Jev; ~$0.001/decision,
@@ -72,21 +73,21 @@ Instead of shell exports, you can keep keys in a `.env` file next to the project
 ```powershell
 Copy-Item .env.example .env
 notepad .env      # fill in OLLAMA_API_KEY, TYPESAFE_API_KEY, optional OPENROUTER_API_KEY
-npm start
+./fluxrouter.exe serve
 ```
 
 - `.env` and `.env.local` are both loaded automatically (gitignored).
 - Precedence: **real environment variables** > `.env.local` > `.env`.
-- Point at a different file: `npm start -- --env-file C:\path\to\keys.env`
-  (the `flux` CLI also loads `.env`/`.env.local` for `flux eval`).
+- Point at a different file: `./fluxrouter.exe serve --env-file C:\path\to\keys.env`
+  (the `old/` TS eval CLI also loads `.env`/`.env.local`).
 - Nothing is written back to disk; keys stay wherever you put them.
 
 ```powershell
 git clone <your-fork> FluxRouter
 cd FluxRouter
-npm install
+go build -o fluxrouter.exe ./cmd/fluxrouter
 Copy-Item .env.example .env && notepad .env       # or export vars in your shell
-npm start
+./fluxrouter.exe serve
 ```
 
 ## Connecting OpenChamber (or any OpenAI client)
@@ -103,24 +104,33 @@ streamed code, Jev timeout resilience, eval within budget) is in **[TESTING.md](
 
 ## CLI
 
+One binary — `fluxrouter` — with subcommands (the frozen TS tree in `old/` still
+provides the eval suite until that subcommand is ported):
+
 ```sh
-flux config validate          # validate fluxrouter.config.json, print tiers
-flux report --by tier         # spend/perf by day | tier | category | model | session
-flux report --today           # today only, with all-frontier counterfactual
-flux trace "your prompt"      # show the FULL decision for one prompt (see below)
-flux eval routing --dry-run   # plan + projected cost, no spend
-flux eval routing             # stage 1: classification only  (~$0.36, cap $1)
-flux eval e2e                 # stage 2: real generation + grading (cap $10)
+fluxrouter serve               # start the OpenAI-compatible proxy (default)
+fluxrouter config validate     # validate fluxrouter.config.json, print tiers
+fluxrouter report --by tier     # spend/perf by day | tier | category | model | session
+fluxrouter trace "your prompt"  # show the FULL decision for one prompt (see below)
+fluxrouter parity fixtures/golden.jsonl   # prove routing matches the recorded TS-engine truth
 ```
 
-### Understanding a routing decision (`flux trace`)
+Eval suite (TS-only until the port — run from `old/` with Node):
 
-`flux trace` runs the **real** classifier and policy on one prompt and prints every
+```sh
+cd old && node cli/flux.ts eval routing --dry-run   # plan + projected cost, no spend
+cd old && node cli/flux.ts eval routing              # stage 1: classification only  (~$0.36, cap $1)
+cd old && node cli/flux.ts eval e2e                  # stage 2: real generation + grading (cap $10)
+```
+
+### Understanding a routing decision (`fluxrouter trace`)
+
+`fluxrouter trace` runs the **real** classifier and policy on one prompt and prints every
 intermediate step — the state sent to Jev, its typed answers, the context gate, each
 policy rule and whether it fired, and the final tier/model/cost:
 
 ```sh
-flux trace "Prove that there are infinitely many primes. Justify every step."
+fluxrouter trace "Prove that there are infinitely many primes. Justify every step."
 ```
 
 ```
@@ -142,7 +152,7 @@ That output is itself a finding: a prime-proof task scoring 0.78 sits just under
 To explore the policy engine with **no network and no spend**:
 
 ```sh
-flux trace "anything" --offline --category math --complexity 1.7 --confidence 0.9
+fluxrouter trace "anything" --offline --category math --complexity 1.7 --confidence 0.9
 ```
 
 `--offline` injects the classification values you supply (`--category`, `--complexity`,
@@ -153,7 +163,7 @@ flux trace "anything" --offline --category math --complexity 1.7 --confidence 0.
 Everything routing-related lives in `fluxrouter.config.json` — tier ladder (models,
 rates, context windows), the category×complexity policy table, thresholds
 (`minConfidence`, `trivialNoul`), cost caps, eval caps. Edit the table to re-tune
-routing without touching code; `flux config validate` tells you if you broke it.
+routing without touching code; `fluxrouter config validate` tells you if you broke it.
 
 ```jsonc
 {
@@ -180,7 +190,7 @@ all on Ollama Cloud, all editable.
 | 3 frontier | kimi-k3 | 3.00 | 15.00 | Jev complexity = 2.0 (its "Hard" top), or a `tier: 3` override |
 
 > These bands are deliberately provisional: Jev's 0–2 score is what the Stage-1
-> routing eval (`flux eval routing`, ~$0.50) exists to calibrate. Run it against real
+> routing eval (`eval routing` (TS suite in `old/`), ~$0.50) exists to calibrate. Run it against real
 > prompts before trusting the ladder.
 
 OpenRouter is the failover/burst lane: same-model equivalents per tier (configurable
@@ -234,11 +244,11 @@ Responses also carry `X-Flux-Route-Tier/Model/Reason/Session` headers.
 
 Three stages, each with a hard budget guard that refuses to run over cap:
 
-1. **Stage 1 — routing only** (`flux eval routing`): public-benchmark-labeled prompts
+1. **Stage 1 — routing only** (`eval routing` (TS suite in `old/`)): public-benchmark-labeled prompts
    (GSM8K / MATH-500 / SWE-bench Lite / hand-written trivial set) are classified, never
    generated — measuring whether Jev's difficulty judgement matches the dataset labels.
    ~$0.36/run, cap $1.
-2. **Stage 2 — end-to-end** (`flux eval e2e`): stratified across tiers, exact-match
+2. **Stage 2 — end-to-end** (`eval e2e` (TS suite in `old/`)): stratified across tiers, exact-match
    grading where ground truth exists, Jev-as-judge otherwise, with a 10% LLM-judge
    cross-check. Cap $10.
 3. **Stage 3 — shadow replay** (free): re-run recorded route cards through policy changes
@@ -249,7 +259,7 @@ retention vs all-frontier at a fraction of the cost.
 
 ### Measured results
 
-**Stage 1 — routing only** (`flux eval routing`, 362 prompts, **$0.36/run**). One full run
+**Stage 1 — routing only** (`eval routing` (TS suite in `old/`), 362 prompts, **$0.36/run**). One full run
 with the default ladder (2026-09-30, Jev `jev-1.13.0`). This is a snapshot, not a
 guarantee — re-run it on your own traffic.
 
@@ -298,27 +308,30 @@ guarantee — re-run it on your own traffic.
 **Reproduce**
 
 ```sh
-node cli/flux.ts eval routing --dry-run                 # plan + projected cost, no spend
-node cli/flux.ts eval routing                           # full run, ~$0.36 (cap $1)
-node cli/flux.ts eval routing --only trivial,math500    # targeted re-run, pennies
+cd old && node cli/flux.ts eval routing --dry-run        # plan + projected cost, no spend
+cd old && node cli/flux.ts eval routing                    # full run, ~$0.36 (cap $1)
+cd old && node cli/flux.ts eval routing --only trivial,math500  # targeted re-run, pennies
 ```
 
 Each run writes a per-prompt audit trail to `.fluxrouter/eval-routing-*.jsonl` and prints
 tier distribution + Jev complexity histograms, so band tuning is data-driven.
 
 > **Not yet measured:** Stage 2 end-to-end answer quality (does `deepseek-v4-pro` actually
-> *solve* the hard prompts?) — `flux eval e2e`, ≤ $10/run. Routing accuracy only proves
+> *solve* the hard prompts?) — `eval e2e` (TS suite in `old/`), ≤ $10/run. Routing accuracy only proves
 > Jev's difficulty judgment matches dataset labels; it does not prove the answers are good.
 > Until Stage 2 runs, treat the tier→model mapping as designed, not validated.
 
 ## Project layout
 
 ```
-src/        server + shared lib (classify, policy, tiers, session, upstream, cardlog, cost, config, metrics)
-cli/        flux CLI (report, config, trace, eval/{routing,e2e,datasets})
-tests/      node:test unit tests (policy, cost, config, sessions, Jev parsing, sticky)
-schema/     JSON schema for fluxrouter.config.json
-docs/       HOW_IT_DECIDES.md (how a decision is made), EVALS.md (eval results explained)
+cmd/fluxrouter/  the single Go binary (serve, report, trace, config, parity)
+internal/        the Go engine: routing (cost+policy+session), jev, config,
+                 upstream, router, telemetry (cardlog+metrics), server, compat, types
+old/             frozen TypeScript engine (v0.1) — fixture generator + eval suite
+fixtures/        golden.jsonl — 1,272 recorded TS-engine decisions (parity oracle)
+schema/          JSON schema for fluxrouter.config.json
+docs/            HOW_IT_DECIDES.md, EVALS.md, LANGUAGE_ANALYSIS.md
+test/e2e/        binary-level end-to-end test (go test ./test/e2e)
 ```
 
 Testing your own install: **[TESTING.md](TESTING.md)**.
@@ -328,7 +341,7 @@ Eval output explained, with the raw runs: **[docs/EVALS.md](docs/EVALS.md)**.
 ## Roadmap
 
 - **v0.1 (current)** — foundation: proxy, Jev routing, 4-tier ladder, route cards, eval,
-  `flux trace`. Measured 95.9% ±1-tier routing accuracy, trivial contract 100%.
+  `fluxrouter trace`. Measured 95.9% ±1-tier routing accuracy, trivial contract 100%.
 - **v0.2 (next)** — calibrated routing logic (bands derived from eval data, coding
   category floors), stickiness improvements (skip classification on sticky hits,
   task-boundary downgrade), sustained validation inside OpenCode / OpenChamber with a

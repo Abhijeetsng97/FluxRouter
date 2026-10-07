@@ -24,10 +24,10 @@ which has not been run. Treat the tier→model mapping as **designed, not valida
 ## Running it
 
 ```sh
-node cli/flux.ts eval routing --dry-run                  # plan + projected cost, no spend
-node cli/flux.ts eval routing                            # full run  (~$0.36, cap $1)
-node cli/flux.ts eval routing --only math500,swebench_lite   # targeted re-run (~$0.20)
-node cli/flux.ts eval routing --only trivial             # contract check only (~$0.05)
+cd old && node cli/flux.ts eval routing --dry-run        # plan + projected cost, no spend
+cd old && node cli/flux.ts eval routing                   # full run (~$0.36, cap $1)
+cd old && node cli/flux.ts eval routing --only math500,swebench_lite  # targeted re-run (~$0.20)
+cd old && node cli/flux.ts eval routing --only trivial  # contract check only (~$0.05)
 ```
 
 - Cost is ~$0.001 per prompt (one Jev decision); the harness estimates ~$0.001/prompt.
