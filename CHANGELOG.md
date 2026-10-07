@@ -6,6 +6,15 @@ versioning: [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — Go engine (v0.3 port, in progress)
+The TypeScript engine's port to Go, proven decision-identical by a golden-fixture
+parity gate (`fluxrouter parity` → 1,272/1,272 recorded TS decisions match, cost
+within 1e-9). Single static binary built with Go 1.27 (stdlib + CGo-free SQLite):
+`fluxrouter serve | report | trace | config | parity`. Route cards, config file,
+headers, and CLI semantics are unchanged; TS-written databases remain readable
+(cross-read proven). The frozen TS reference lives in `old/` (fixture generator +
+eval suite until the eval port lands). See [ROADMAP.md](ROADMAP.md) stage G1/G2.
+
 ### Planned — v0.2
 Calibrated routing logic (data-derived bands, category floors), stickiness improvements
 (skip classification on sticky hits, task-boundary downgrade), and sustained validation
@@ -13,6 +22,12 @@ inside OpenCode / OpenChamber with a published real-traffic report. See
 [ROADMAP.md](ROADMAP.md).
 
 ### Planned — v0.3
+The Go rewrite: the engine ported route-by-route behind a parity harness (golden
+fixtures from v0.2, then a week of live shadow dual-run), shipped as a single static
+binary for all platforms. Config, route-card schema, headers, and CLI stay identical —
+the only visible change is how it installs. See
+
+### Planned — v0.4
 Context economics: compaction, trimming stale tool output, and Jev-driven reduction of
 injected skills / tool schemas, plus prompt-cache-aware routing.
 
